@@ -1,0 +1,52 @@
+{
+    "packages": {
+        ".": {
+            "package-name": "dynantic",
+            "release-type": "python",
+            "changelog-path": "CHANGELOG.md",
+            "extra-files": [
+                "pyproject.toml"
+            ]
+        }
+    },
+    "release-search-depth": 100,
+    "pull-request-title-pattern": "chore${scope}: release${component} ${version}",
+    "pull-request-header": "🤖 Release Please has prepared a new release",
+    "changelog-sections": [
+        {
+            "type": "feat",
+            "section": "Features",
+            "hidden": false
+        },
+        {
+            "type": "fix",
+            "section": "Bug Fixes",
+            "hidden": false
+        },
+        {
+            "type": "perf",
+            "section": "Performance Improvements",
+            "hidden": false
+        },
+        {
+            "type": "refactor",
+            "section": "Code Refactoring",
+            "hidden": false
+        },
+        {
+            "type": "docs",
+            "section": "Documentation",
+            "hidden": false
+        },
+        {
+            "type": "test",
+            "section": "Tests",
+            "hidden": false
+        },
+        {
+            "type": "chore",
+            "section": "Miscellaneous",
+            "hidden": true
+        }
+    ]
+}

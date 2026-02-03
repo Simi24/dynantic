@@ -1,0 +1,69 @@
+name: Publish Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Publishing target'
+        required: true
+        type: choice
+        options:
+          - testpypi
+          - pypi
+        default: testpypi
+      ref:
+        description: 'Git ref (tag or commit SHA) to publish'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # L'environment è CRUCIALE per il Trusted Publishing
+    environment: ${{ inputs.target == 'pypi' && 'pypi-production' || 'pypi-test' }}
+    
+    # Questo permesso è obbligatorio per generare il token OIDC
+    permissions:
+      id-token: write  # IMPORTANTE: serve per l'autenticazione senza password
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Build package
+        run: |
+          uv build
+        # uv build crea i file in 'dist/' di default, che è dove l'azione pypa guarda
+
+      - name: Publish to TestPyPI
+        if: inputs.target == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          # Non serve password/token, usa OIDC automaticamente
+
+      - name: Publish to PyPI
+        if: inputs.target == 'pypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # Nessun parametro extra: pubblica su PyPI ufficiale di default
+
+      - name: Summary
+        if: always() # Esegue il summary anche se l'upload fallisce (utile per debug)
+        run: |
+          echo "### 🚀 Package Publishing Attempt Completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target:** ${{ inputs.target }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Ref:** ${{ inputs.ref || github.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package:** dynantic" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,15 @@
+services:
+  localstack:
+    image: localstack/localstack:latest
+    container_name: dynantic_playground
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=dynamodb
+      - DEBUG=0
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      # AWS_ACCESS_KEY_ID e SECRET servono a far contento l'SDK interno, 
+      # anche se non controlla le credenziali davvero.
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=eu-south-1
