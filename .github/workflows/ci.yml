@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+
+    services:
+      localstack:
+        image: localstack/localstack:3.0
+        ports:
+          - 4566:4566
+        env:
+          SERVICES: dynamodb
+          DEBUG: 1
+          DOCKER_HOST: unix:///var/run/docker.sock
+        options: >-
+          --health-cmd "curl http://localhost:4566/_localstack/health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+
+    - name: Set up Python ${{ matrix.python-version }}
+      run: uv python install ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev
+
+    - name: Wait for LocalStack to be ready
+      run: |
+        timeout 120 bash -c 'until curl -f http://localhost:4566/_localstack/health; do sleep 5; done'
+
+    - name: Run unit tests
+      run: |
+        uv run pytest tests/unit/ -v --tb=short
+
+    - name: Run integration tests
+      run: |
+        uv run pytest tests/integration/ -v --tb=short -m integration
+      env:
+        LOCALSTACK_ENDPOINT: http://localhost:4566
+
+    - name: Generate coverage report
+      run: |
+        uv run pytest --cov=dynantic --cov-report=xml --cov-report=html
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+
+    - name: Set up Python
+      run: uv python install 3.11
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev
+
+    - name: Run mypy type checking
+      run: |
+        uv run mypy dynantic/
+
+    - name: Run ruff linting
+      run: |
+        uv run ruff check dynantic/
+
+    - name: Run ruff formatting check
+      run: |
+        uv run ruff format --check dynantic/
+
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+
+    - name: Set up Python
+      run: uv python install 3.11
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev
+
+    - name: Build documentation
+      run: |
+        # Add documentation build steps here if you have docs
+        echo "Documentation build would go here"
