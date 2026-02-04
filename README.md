@@ -1,3 +1,7 @@
+<p align="center">
+    <img src="assets/dyno_dynantic.png" alt="Dynantic" width="600" />
+</p>
+
 # Dynantic
 
 **Type-safe DynamoDB ORM with Pydantic validation** 
@@ -26,6 +30,7 @@ Dynantic is a **synchronous-first** Python ORM for Amazon DynamoDB that combines
 **Optimized for**: AWS Lambda, serverless functions, FastAPI (with threadpool), batch jobs, and scripts.
 
 ---
+
 
 ## Table of Contents
 
@@ -1048,8 +1053,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 - 📖 **Documentation**: This README
-- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/dynantic/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/dynantic/discussions)
 - 📧 **Email**: pettasimonepaolo@gmail.com
 
 ---
