@@ -16,3 +16,5 @@ site
 __pycache__/
 .pytest_cache/
 plans/
+
+.DS_Store

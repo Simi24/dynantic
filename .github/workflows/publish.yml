@@ -20,12 +20,10 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # L'environment è CRUCIALE per il Trusted Publishing
     environment: ${{ inputs.target == 'pypi' && 'pypi-production' || 'pypi-test' }}
     
-    # Questo permesso è obbligatorio per generare il token OIDC
     permissions:
-      id-token: write  # IMPORTANTE: serve per l'autenticazione senza password
+      id-token: write
       contents: read
 
     steps:
@@ -45,22 +43,19 @@ jobs:
       - name: Build package
         run: |
           uv build
-        # uv build crea i file in 'dist/' di default, che è dove l'azione pypa guarda
 
       - name: Publish to TestPyPI
         if: inputs.target == 'testpypi'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
-          # Non serve password/token, usa OIDC automaticamente
 
       - name: Publish to PyPI
         if: inputs.target == 'pypi'
         uses: pypa/gh-action-pypi-publish@release/v1
-        # Nessun parametro extra: pubblica su PyPI ufficiale di default
 
       - name: Summary
-        if: always() # Esegue il summary anche se l'upload fallisce (utile per debug)
+        if: always()
         run: |
           echo "### 🚀 Package Publishing Attempt Completed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
