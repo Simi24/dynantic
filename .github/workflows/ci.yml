@@ -3,9 +3,14 @@ name: CI
 on:
   push:
     branches: [ main, develop ]
+    paths:
+      - 'dynantic/**'
+      - 'tests/**'
   pull_request:
     branches: [ main, develop ]
-
+    paths:
+      - 'dynantic/**'
+      - 'tests/**'
 jobs:
   test:
     runs-on: ubuntu-latest

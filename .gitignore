@@ -1,6 +1,8 @@
 *.pyc
 .mypy_cache
-.vscode
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .idea
 poetry.lock
 dist

@@ -1027,7 +1027,7 @@ We welcome contributions! Here's how:
 **Development Setup:**
 
 ```bash
-git clone https://github.com/yourusername/dynantic.git
+git clone https://github.com/Simi24/dynantic.git
 cd dynantic
 uv sync  # Install dependencies
 docker compose up -d  # Start LocalStack
