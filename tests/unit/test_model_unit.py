@@ -50,8 +50,8 @@ class TestDynamoModelClientManagement:
         # Should return the injected client
         assert TestModel._get_client() is mock_client
 
-    def test_different_models_have_separate_clients(self, mock_client) -> None:
-        """Test that different models can have different clients."""
+    def test_set_client_is_global(self, mock_client) -> None:
+        """Test that set_client sets a global client shared by all models."""
 
         class ModelA(DynamoModel):
             class Meta:
@@ -66,13 +66,36 @@ class TestDynamoModelClientManagement:
             id: str = Key()
 
         mock_client_a = MagicMock()
-        mock_client_b = MagicMock()
 
         ModelA.set_client(mock_client_a)
-        ModelB.set_client(mock_client_b)
 
+        # Global client is shared across all models
         assert ModelA._get_client() is mock_client_a
-        assert ModelB._get_client() is mock_client_b
+        assert ModelB._get_client() is mock_client_a
+
+    def test_using_client_scopes_per_context(self, mock_client) -> None:
+        """Test that using_client properly scopes a client to a block."""
+
+        class ModelA(DynamoModel):
+            class Meta:
+                table_name = "table_a"
+
+            id: str = Key()
+
+        global_client = MagicMock()
+        scoped_client = MagicMock()
+
+        ModelA.set_client(global_client)
+
+        # Outside context: global client
+        assert ModelA._get_client() is global_client
+
+        # Inside context: scoped client
+        with ModelA.using_client(scoped_client):
+            assert ModelA._get_client() is scoped_client
+
+        # After context: back to global
+        assert ModelA._get_client() is global_client
 
 
 @pytest.mark.unit

@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 if TYPE_CHECKING:
     # Prevent circular imports at runtime
-    from .base import DynamoModel
+    from .model import DynamoModel
 
 # We use a TypeVar bound to 'DynamoModel' to ensure
 # that QueryBuilder returns the correct subclass (e.g., User, Message)

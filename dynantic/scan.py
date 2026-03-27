@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 if TYPE_CHECKING:
     # Prevent circular imports at runtime
-    from .base import DynamoModel
+    from .model import DynamoModel
 
 from ._logging import logger
 from .exceptions import handle_dynamo_errors

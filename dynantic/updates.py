@@ -25,7 +25,7 @@ from .conditions import Attr, DynCondition, compile_condition
 from .exceptions import handle_dynamo_errors
 
 if TYPE_CHECKING:
-    from .base import DynamoModel
+    from .model import DynamoModel
 
 
 class UpdateAction(ABC):

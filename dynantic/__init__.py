@@ -1,4 +1,3 @@
-from .base import DynamoModel
 from .conditions import Attr, Condition, DynCondition
 from .exceptions import (
     ConditionalCheckFailedError,
@@ -12,6 +11,7 @@ from .exceptions import (
     ValidationError,
 )
 from .fields import Discriminator, GSIKey, GSISortKey, Key, SortKey
+from .model import DynamoModel
 from .pagination import PageResult
 from .updates import Add, Delete, Remove, Set, UpdateBuilder
 

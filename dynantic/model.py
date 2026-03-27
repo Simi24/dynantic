@@ -1,270 +1,32 @@
+"""
+DynamoModel — the base class users inherit from.
+
+Combines Pydantic validation with DynamoDB CRUD operations,
+query/scan entry points, and polymorphic model registration.
+"""
+
 from collections.abc import Generator
 from contextlib import contextmanager
-from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar
 
-import boto3
 from pydantic import BaseModel, ConfigDict
 
-# We must inherit from Pydantic's internal metaclass to coexist with BaseModel
-from pydantic._internal._model_construction import ModelMetaclass
-
 if TYPE_CHECKING:
-    from .conditions import Condition  # Avoid circular import
+    from .conditions import Condition
     from .pagination import PageResult
     from .scan import DynamoScanBuilder
     from .updates import UpdateAction, UpdateBuilder
 
-
 from ._logging import logger, redact_key
-from .config import GSIDefinition, ModelOptions
+from .client import get_client, set_client, using_client
+from .config import ModelOptions
 from .exceptions import handle_dynamo_errors
+from .metaclass import DynamoMeta
 from .query import DynamoQueryBuilder
 from .serializer import DynamoSerializer
 
 # Generic TypeVar to allow methods like .get() to return the correct subclass type (User)
 T = TypeVar("T", bound="DynamoModel")
-
-
-class DynamoMeta(ModelMetaclass):
-    """
-    The Brain of the operation.
-    It runs ONCE when the class is defined (imported), not when instantiated.
-    """
-
-    def __new__(
-        cls, name: str, bases: tuple[type, ...], namespace: dict[str, Any], **kwargs: Any
-    ) -> Any:
-        # Check if this class has a Discriminator field
-        has_discriminator = any(
-            hasattr(value, "json_schema_extra")
-            and isinstance(value.json_schema_extra, dict)
-            and value.json_schema_extra.get("_dynamo_discriminator")
-            for value in namespace.values()
-            if hasattr(value, "json_schema_extra")
-        )
-
-        # For classes with discriminator, allow extra fields
-        if has_discriminator:
-            if "model_config" not in namespace:
-                namespace["model_config"] = ConfigDict(extra="allow", populate_by_name=True)
-            else:
-                existing = namespace["model_config"]
-                if hasattr(existing, "extra"):
-                    existing.extra = "allow"
-                else:
-                    existing["extra"] = "allow"
-
-        # 1. Create the Pydantic class normally
-        new_cls = super().__new__(cls, name, bases, namespace, **kwargs)
-
-        # For polymorphic base classes, modify model_config to allow extra fields
-        if hasattr(new_cls, "_meta") and new_cls._meta.is_base_entity:
-            # Metaclass modifies Pydantic's model_config dynamically - mypy can't track this
-            new_cls.model_config = ConfigDict(extra="allow", populate_by_name=True)  # type: ignore[attr-defined]
-
-        # Stop processing if it's the base DynamoModel class itself
-        if name == "DynamoModel":
-            return new_cls
-
-        # Check if this is a registered subclass (has _pending_parent_model marker)
-        parent_model = getattr(new_cls, "_pending_parent_model", None)
-        discriminator_value = getattr(new_cls, "_pending_discriminator_value", None)
-
-        if parent_model is not None:
-            # This is a registered subclass - inherit from parent but track lineage
-            parent_meta = parent_model._meta
-
-            # Create a new ModelOptions for this subclass
-            new_cls._meta = ModelOptions(  # type: ignore[attr-defined]
-                table_name=parent_meta.table_name,
-                pk_name=parent_meta.pk_name,
-                sk_name=parent_meta.sk_name,
-                region=parent_meta.region,
-                gsi_definitions=parent_meta.gsi_definitions,
-                discriminator_field=parent_meta.discriminator_field,
-                entity_registry=parent_meta.entity_registry,  # Shared registry
-                is_base_entity=False,
-                parent_model=parent_model,
-                discriminator_value=discriminator_value,
-            )
-
-            # Clean up temporary markers
-            delattr(new_cls, "_pending_parent_model")
-            delattr(new_cls, "_pending_discriminator_value")
-
-            return new_cls
-
-        # 2. Extract configuration from the inner 'Meta' class
-        meta_cls = namespace.get("Meta")
-
-        # Check if this inherits from a polymorphic base class
-        polymorphic_base = None
-        for base in bases:
-            if hasattr(base, "_meta") and getattr(base._meta, "is_base_entity", False):
-                polymorphic_base = base
-                break
-
-        if polymorphic_base and not meta_cls:
-            # Inherit configuration from polymorphic base
-            base_meta = polymorphic_base._meta
-            new_cls._meta = ModelOptions(  # type: ignore[attr-defined]
-                table_name=base_meta.table_name,
-                pk_name=base_meta.pk_name,
-                sk_name=base_meta.sk_name,
-                region=base_meta.region,
-                gsi_definitions=base_meta.gsi_definitions,
-                discriminator_field=base_meta.discriminator_field,
-                entity_registry=base_meta.entity_registry,
-                is_base_entity=False,
-                parent_model=polymorphic_base,
-            )
-            return new_cls
-
-        # If no Meta, try to inherit from a base class
-        if not meta_cls:
-            for base in bases:
-                if hasattr(base, "_meta"):
-                    # Inherit configuration from base
-                    base_meta = base._meta
-                    new_cls._meta = ModelOptions(  # type: ignore[attr-defined]
-                        table_name=base_meta.table_name,
-                        pk_name=base_meta.pk_name,
-                        sk_name=base_meta.sk_name,
-                        region=base_meta.region,
-                        gsi_definitions=base_meta.gsi_definitions,
-                        discriminator_field=base_meta.discriminator_field,
-                        entity_registry=base_meta.entity_registry,
-                        is_base_entity=base_meta.is_base_entity,
-                    )
-                    return new_cls
-
-            raise ValueError(f"Model {name} is missing a 'class Meta' with 'table_name'.")
-
-        if not hasattr(meta_cls, "table_name"):
-            raise ValueError(f"Model {name} is missing a 'table_name' in class Meta.")
-
-        # 3. Scan fields to find Primary Key, Sort Key, Discriminator, and GSI definitions
-        # We look for flags injected by fields.Key(), SortKey(), Discriminator(), etc.
-        pk_name: str | None = None
-        sk_name: str | None = None
-        discriminator_field: str | None = None
-
-        # Track GSI keys: {index_name: {"pk": field_name, "sk": field_name}}
-        gsi_keys: dict[str, dict[str, str]] = {}
-
-        # model_fields is a Pydantic attribute added at class creation - mypy sees incomplete type
-        for field_name, field_info in new_cls.model_fields.items():  # type: ignore[attr-defined]
-            extra = field_info.json_schema_extra
-            if not extra:
-                continue
-
-            # Main table keys
-            if extra.get("_dynamo_pk"):
-                if pk_name is not None:
-                    raise ValueError(f"Model {name} can have only one field defined with Key()")
-                pk_name = field_name
-            elif extra.get("_dynamo_sk"):
-                if sk_name is not None:
-                    raise ValueError(f"Model {name} can have only one field defined with SortKey()")
-                sk_name = field_name
-
-            # Discriminator field
-            if extra.get("_dynamo_discriminator"):
-                if discriminator_field is not None:
-                    raise ValueError(f"Model {name} can have only one Discriminator() field")
-                discriminator_field = field_name
-
-            # GSI keys
-            if "_dynamo_gsi_pk" in extra:
-                index_name = extra["_dynamo_gsi_pk"]
-                if index_name not in gsi_keys:
-                    gsi_keys[index_name] = {}
-                if "pk" in gsi_keys[index_name]:
-                    raise ValueError(
-                        f"GSI '{index_name}' in model {name} can have only one partition key"
-                    )
-                gsi_keys[index_name]["pk"] = field_name
-
-            if "_dynamo_gsi_sk" in extra:
-                index_name = extra["_dynamo_gsi_sk"]
-                if index_name not in gsi_keys:
-                    gsi_keys[index_name] = {}
-                if "sk" in gsi_keys[index_name]:
-                    raise ValueError(
-                        f"GSI '{index_name}' in model {name} can have only one sort key"
-                    )
-                gsi_keys[index_name]["sk"] = field_name
-
-        # If no PK found in current fields, try to inherit from base classes
-        if not pk_name:
-            # We skip `DynamoModel` itself and object
-            for base in bases:
-                if hasattr(base, "_meta") and isinstance(base._meta, ModelOptions):
-                    # Inherit PK
-                    pk_name = base._meta.pk_name
-                    # Inherit SK only if not already found (subclass might define its own,
-                    # but usually it's stable).
-                    # If subclass defined SK, sk_name is not None.
-                    # If subclass didn't define SK, we inherit it.
-                    if sk_name is None:
-                        sk_name = base._meta.sk_name
-
-                    # We found a valid base configuration, stop looking
-                    break
-
-        if not pk_name:
-            raise ValueError(f"Model {name} must have exactly one field defined with Key()")
-
-        # 4. Build GSI definitions
-        gsi_definitions: dict[str, GSIDefinition] = {}
-        for index_name, keys in gsi_keys.items():
-            if "pk" not in keys:
-                raise ValueError(
-                    f"GSI '{index_name}' in model {name} must have a partition key "
-                    f"defined with GSIKey(index_name='{index_name}')"
-                )
-            gsi_definitions[index_name] = GSIDefinition(
-                index_name=index_name,
-                pk_name=keys["pk"],
-                sk_name=keys.get("sk"),
-            )
-
-        # 5. Attach the processed configuration to the class
-        # We use a protected attribute '_meta' to avoid colliding with user fields
-        new_cls._meta = ModelOptions(  # type: ignore[attr-defined]
-            table_name=meta_cls.table_name,
-            pk_name=pk_name,
-            sk_name=sk_name,
-            region=getattr(meta_cls, "region", "us-east-1"),
-            gsi_definitions=gsi_definitions,
-            discriminator_field=discriminator_field,
-            entity_registry={},  # Empty, will be populated by @register
-            is_base_entity=discriminator_field is not None,
-        )
-
-        # For polymorphic base classes, modify model_config to allow extra fields
-        if discriminator_field is not None:
-            # Metaclass modifies Pydantic's model_config dynamically - mypy can't track this
-            new_cls.model_config = ConfigDict(extra="allow", populate_by_name=True)  # type: ignore[attr-defined]
-
-        # 6. Instrument class attributes for Query DSL
-        # This replaces the Pydantic field descriptors on the class with Attr() builders
-        # enabling the syntax: User.age >= 18
-        # This does NOT affect instance attribute access, which still returns the values.
-        from .conditions import Attr
-
-        # model_fields is a Pydantic attribute added at class creation - mypy sees incomplete type
-        for field_name, field_info in new_cls.model_fields.items():  # type: ignore[attr-defined]
-            # Use the alias if defined (this is the actual DynamoDB attribute name)
-            # or fall back to the field name
-            dynamo_name = field_info.alias or field_name
-
-            # Helper: Don't overwrite methods or existing properties if any (unlikely for fields)
-            # but we force overwrite to ensure DSL works.
-            setattr(new_cls, field_name, Attr(dynamo_name))
-
-        return new_cls
 
 
 class DynamoModel(BaseModel, metaclass=DynamoMeta):
@@ -276,57 +38,31 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
     # Type Hinting for the configuration injected by Metaclass
     _meta: ClassVar[ModelOptions]
 
-    # Internal utilities (Serializer & Client)
-    # In a real async app, the client should be managed via dependency injection/lifespan
+    # Internal utilities
     _serializer: ClassVar[DynamoSerializer] = DynamoSerializer()
-    _client: ClassVar[Any | None] = None
-    _client_context: ClassVar[ContextVar[Any | None]] = ContextVar("dynamo_client", default=None)
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    # ── Client Management ──────────────────────────────────────────
+
     @classmethod
     def _get_client(cls) -> Any:
-        """
-        Returns a Boto3 DynamoDB Client.
-        Uses a singleton pattern to avoid multiple instantiations.
-
-        Architectural Note:
-        -------------------
-        In a production async application, consider using aioboto3 and proper
-        lifecycle management (startup/shutdown) to handle the client.
-
-        Returns:
-            Boto3 DynamoDB Client instance.
-        """
-        # 1. Check ContextVar (Thread-safe/Async-safe override)
-        ctx_client = cls._client_context.get()
-        if ctx_client is not None:
-            return ctx_client
-
-        # 2. Check Global Default (Backward compatibility)
-        if cls._client is not None:
-            return cls._client
-
-        # 3. Initialize Default Global Client
-        cls._client = boto3.client("dynamodb")
-        return cls._client
+        """Returns the active DynamoDB client (context-local or global)."""
+        return get_client()
 
     @classmethod
     @contextmanager
     def using_client(cls, client: Any) -> Generator[None, None, None]:
         """
-        Context manager to properly scope a client to a block of code.
+        Context manager to scope a client to a block of code.
         Thread-safe and Async-safe using contextvars.
 
         Usage:
             with User.using_client(my_client):
                 User.get("...")
         """
-        token = cls._client_context.set(client)
-        try:
+        with using_client(client):
             yield
-        finally:
-            cls._client_context.reset(token)
 
     @classmethod
     def set_client(cls, client: Any) -> None:
@@ -334,7 +70,9 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
         Allows injecting a custom Boto3/aioboto3 client.
         Useful for testing or advanced configurations.
         """
-        cls._client = client  # Replace with aioboto3 for async
+        set_client(client)
+
+    # ── CRUD Operations ────────────────────────────────────────────
 
     @classmethod
     def get(cls: type[T], pk: Any, sk: Any | None = None) -> T | None:
@@ -356,8 +94,7 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
         # 2. Serialize key to Dynamo format (e.g. {'email': {'S': '...'}})
         dynamo_key = cls._serializer.to_dynamo(key_dict)
 
-        # 3. Perform the fetch (Async in production)
-        # For this prototype, we assume the client method is awaitable or wrapped
+        # 3. Perform the fetch
         client = cls._get_client()
 
         logger.debug(
@@ -479,7 +216,6 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
             from dynantic import Attr
             user.delete_item(condition=Attr("version") == user.version)
         """
-        # Reuses the class method logic passing its own keys
         pk_val = getattr(self, self._meta.pk_name)
         sk_val = None
         if self._meta.sk_name:
@@ -571,6 +307,8 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
 
         return UpdateBuilder(self.__class__, pk_val, sk_val)
 
+    # ── Query & Scan ───────────────────────────────────────────────
+
     @classmethod
     def scan(cls: type[T], index_name: str | None = None) -> "DynamoScanBuilder[T]":
         """
@@ -626,7 +364,6 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
         config = self._meta
 
         # 1. Dump Pydantic model to dict (preserving types like Sets for serializer)
-        # 'by_alias' ensures we respect field aliases if used
         data = self.model_dump(mode="python", exclude_none=True)
 
         # 2. Convert to DynamoDB Format (handling Floats -> Decimals)
@@ -646,10 +383,8 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
             kwargs.update(condition_params)
 
         # 5. Send to AWS
-        # 5. Send to AWS
         client = self._get_client()
 
-        # Log start
         pk_val = getattr(self, config.pk_name)
         logger.info(
             "Saving item",
@@ -707,6 +442,8 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
             )
         return DynamoQueryBuilder(cls, pk_val, index_name=index_name)
 
+    # ── Polymorphism ───────────────────────────────────────────────
+
     @classmethod
     def register(cls, discriminator_value: str) -> Any:
         """
@@ -746,7 +483,6 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
                 )
 
             # Set temporary markers for the metaclass to pick up
-            # These are processed during subclass creation
             subclass._pending_parent_model = cls  # type: ignore[attr-defined]
             subclass._pending_discriminator_value = discriminator_value  # type: ignore[attr-defined]
 
@@ -759,39 +495,32 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
                 subclass._meta.parent_model = cls
 
             # AUTO-INJECT: Set the discriminator field value on the subclass
-            # This eliminates the need for manual field redefinition
             discriminator_field = cls._meta.discriminator_field
             if discriminator_field:
-                # Set as class attribute (replaces Attr object from parent)
                 setattr(subclass, discriminator_field, discriminator_value)
 
-                # CRITICAL: Also update the annotation to ensure Pydantic uses the value
                 if hasattr(subclass, "__annotations__"):
-                    # Keep the annotation but ensure the default value is used
                     subclass.__annotations__[discriminator_field] = str
 
-                # Update Pydantic's model_fields to use the discriminator value as default
                 if (
                     hasattr(subclass, "model_fields")
                     and discriminator_field in subclass.model_fields
                 ):
-                    # Rebuild the field with the new default
                     from pydantic.fields import FieldInfo
 
-                    # Create a new FieldInfo with the discriminator value as default
                     new_field = FieldInfo(
                         annotation=str,
                         default=discriminator_value,
                         default_factory=None,
                     )
                     subclass.model_fields[discriminator_field] = new_field
-
-                    # Force Pydantic to rebuild the schema/validators
                     subclass.model_rebuild(force=True)
 
             return subclass
 
         return decorator
+
+    # ── Scan Page (legacy convenience) ─────────────────────────────
 
     @classmethod
     def scan_page(
@@ -872,6 +601,8 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
         cursor = cls._serializer.from_dynamo(raw_key) if raw_key else None
 
         return PageResult(items=items, last_evaluated_key=cursor, count=len(items))
+
+    # ── Deserialization ────────────────────────────────────────────
 
     @classmethod
     def _deserialize_item(cls: type[T], raw_data: dict[str, Any]) -> T:

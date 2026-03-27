@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from dynantic.base import DynamoModel
+from dynantic import DynamoModel
 from dynantic.fields import Key
 from dynantic.updates import Add
 
