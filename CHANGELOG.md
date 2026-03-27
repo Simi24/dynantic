@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/Simi24/dynantic/compare/dynantic-v0.3.0...dynantic-v0.3.1) (2026-03-27)
+
+
+### Bug Fixes
+
+* add attestations permission for publishing workflow ([484cec0](https://github.com/Simi24/dynantic/commit/484cec0ec4b576e15008c59fbad4e99747be3a09))
+
 ## [0.3.0](https://github.com/Simi24/dynantic/compare/dynantic-v0.2.0...dynantic-v0.3.0) (2026-03-27)
 
 
