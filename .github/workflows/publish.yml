@@ -25,6 +25,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      attestations: write
 
     steps:
       - name: Checkout code
