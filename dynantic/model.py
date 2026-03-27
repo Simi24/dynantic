@@ -74,6 +74,144 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
         """
         set_client(client)
 
+    # ── Transaction Operations ─────────────────────────────────────────
+
+    @classmethod
+    def transact_save(cls: type[T], items: list["DynamoModel"]) -> None:
+        """
+        Saves multiple items atomically. All items succeed or all fail.
+        Items can be from different model classes (cross-table transactions).
+
+        Args:
+            items: List of model instances to save atomically
+
+        Raises:
+            TransactionConflictError: If the transaction conflicts or a condition fails
+            ValidationError: If more than 100 items are provided
+
+        Usage:
+            DynamoModel.transact_save([user, order, log_entry])
+        """
+        from .transactions import TRANSACT_LIMIT, TransactPut
+
+        if len(items) > TRANSACT_LIMIT:
+            from .exceptions import ValidationError
+
+            raise ValidationError(f"Transaction limit is {TRANSACT_LIMIT} items, got {len(items)}")
+
+        actions = [TransactPut(item) for item in items]
+        transact_items = [a._to_transact_item() for a in actions]
+
+        client = cls._get_client()
+
+        logger.info(
+            "Transact save",
+            extra={"item_count": len(items), "operation": "transact_save"},
+        )
+
+        with handle_dynamo_errors():
+            client.transact_write_items(TransactItems=transact_items)
+
+    @classmethod
+    def transact_write(cls: type[T], actions: list[Any]) -> None:
+        """
+        Executes a list of write actions atomically.
+        Supports TransactPut, TransactDelete, and TransactConditionCheck.
+
+        Args:
+            actions: List of TransactPut, TransactDelete, or TransactConditionCheck
+
+        Raises:
+            TransactionConflictError: If the transaction conflicts or a condition fails
+            ValidationError: If more than 100 actions are provided
+
+        Usage:
+            from dynantic import TransactPut, TransactDelete, TransactConditionCheck
+
+            DynamoModel.transact_write([
+                TransactPut(user),
+                TransactDelete(OldOrder, order_id="123"),
+                TransactConditionCheck(User, Attr("status").eq("active"), user_id="u1"),
+            ])
+        """
+        from .transactions import TRANSACT_LIMIT
+
+        if len(actions) > TRANSACT_LIMIT:
+            from .exceptions import ValidationError
+
+            raise ValidationError(
+                f"Transaction limit is {TRANSACT_LIMIT} actions, got {len(actions)}"
+            )
+
+        transact_items = [a._to_transact_item() for a in actions]
+
+        client = cls._get_client()
+
+        logger.info(
+            "Transact write",
+            extra={"action_count": len(actions), "operation": "transact_write"},
+        )
+
+        with handle_dynamo_errors():
+            client.transact_write_items(TransactItems=transact_items)
+
+    @classmethod
+    def transact_get(cls: type[T], actions: list[Any]) -> list["DynamoModel | None"]:
+        """
+        Fetches multiple items atomically using TransactGetItems.
+        Returns items in the same order as the input actions.
+
+        Args:
+            actions: List of TransactGet objects
+
+        Returns:
+            List of model instances (or None for missing items), in order
+
+        Raises:
+            TransactionConflictError: If the transaction conflicts
+            ValidationError: If more than 100 actions are provided
+
+        Usage:
+            from dynantic import TransactGet
+
+            results = DynamoModel.transact_get([
+                TransactGet(User, user_id="u1"),
+                TransactGet(Order, order_id="o1"),
+            ])
+        """
+        from .transactions import TRANSACT_LIMIT
+
+        if len(actions) > TRANSACT_LIMIT:
+            from .exceptions import ValidationError
+
+            raise ValidationError(
+                f"Transaction limit is {TRANSACT_LIMIT} actions, got {len(actions)}"
+            )
+
+        transact_items = [a._to_transact_item() for a in actions]
+
+        client = cls._get_client()
+
+        logger.info(
+            "Transact get",
+            extra={"action_count": len(actions), "operation": "transact_get"},
+        )
+
+        with handle_dynamo_errors():
+            response = client.transact_get_items(TransactItems=transact_items)
+
+        results: list[DynamoModel | None] = []
+        for i, resp_item in enumerate(response.get("Responses", [])):
+            item_data = resp_item.get("Item")
+            if item_data:
+                model_cls = actions[i].model_cls
+                raw_data = model_cls._serializer.from_dynamo(item_data)
+                results.append(model_cls._deserialize_item(raw_data))
+            else:
+                results.append(None)
+
+        return results
+
     # ── Batch Operations ─────────────────────────────────────────────
 
     @classmethod

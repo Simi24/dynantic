@@ -13,6 +13,7 @@ from .exceptions import (
 from .fields import TTL, Discriminator, GSIKey, GSISortKey, Key, SortKey
 from .model import DynamoModel
 from .pagination import PageResult
+from .transactions import TransactConditionCheck, TransactDelete, TransactGet, TransactPut
 from .updates import Add, Delete, Remove, Set, UpdateBuilder
 
 __all__ = [
@@ -30,6 +31,11 @@ __all__ = [
     "Add",
     "Remove",
     "Delete",
+    # Transactions
+    "TransactPut",
+    "TransactDelete",
+    "TransactConditionCheck",
+    "TransactGet",
     # Conditions DSL
     "Attr",  # Primary builder for conditions
     "DynCondition",  # Wrapper type (rarely used directly)
