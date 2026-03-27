@@ -1,37 +1,62 @@
 from typing import Any
+from uuid import uuid4
 
 from pydantic import Field
 
 
-def Key(default: Any = ..., **kwargs: Any) -> Any:
+def Key(default: Any = ..., *, auto: bool = False, **kwargs: Any) -> Any:
     """
     Marks a Pydantic field as a DynamoDB Primary Key (Partition Key).
 
     Usage:
         email: str = Key()
+        item_id: UUID = Key(auto=True)  # Auto-generates UUID4
 
-    Architectural Note:
-    -------------------
-    This function wraps the standard Pydantic Field. It injects a hidden flag
-    ('_dynamo_pk') into 'json_schema_extra'. The DynamoMeta metaclass will
-    inspect this flag at class creation time to identify the primary key
-    without requiring the user to explicitly define it in Config.
+    Args:
+        default: Default value for the field
+        auto: If True, auto-generates a UUID4 on instantiation.
+              Field should be typed as UUID. Cannot be combined with an explicit default.
+        **kwargs: Additional Pydantic Field arguments
     """
-    # Extract existing extra dict or create new one
     json_schema_extra = kwargs.pop("json_schema_extra", {})
-
-    # Inject our internal flag
     json_schema_extra["_dynamo_pk"] = True
 
-    # Return a standard Pydantic Field.
-    # The '...' (Ellipsis) is Pydantic's way of saying "Required field" if no default is provided.
+    if auto:
+        if default is not ...:
+            raise ValueError("Cannot use Key(auto=True) with an explicit default value")
+        json_schema_extra["_dynamo_auto_uuid"] = True
+        return Field(
+            default_factory=uuid4,
+            json_schema_extra=json_schema_extra,
+            **kwargs,
+        )
+
     return Field(default, json_schema_extra=json_schema_extra, **kwargs)
 
 
-def SortKey(default: Any = ..., **kwargs: Any) -> Any:
-    """Marks a Pydantic field as a DynamoDB Sort Key."""
+def SortKey(default: Any = ..., *, auto: bool = False, **kwargs: Any) -> Any:
+    """
+    Marks a Pydantic field as a DynamoDB Sort Key.
+
+    Args:
+        default: Default value for the field
+        auto: If True, auto-generates a UUID4 on instantiation.
+              Field should be typed as UUID. Cannot be combined with an explicit default.
+        **kwargs: Additional Pydantic Field arguments
+    """
     json_schema_extra = kwargs.pop("json_schema_extra", {})
     json_schema_extra["_dynamo_sk"] = True
+
+    if auto:
+        if default is not ...:
+            raise ValueError("Cannot use SortKey(auto=True) with an explicit default value")
+        json_schema_extra["_dynamo_auto_uuid"] = True
+        return Field(
+            default_factory=uuid4,
+            json_schema_extra=json_schema_extra,
+            **kwargs,
+        )
+
     return Field(default, json_schema_extra=json_schema_extra, **kwargs)
 
 

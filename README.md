@@ -26,6 +26,10 @@ Dynantic is a **synchronous-first** Python ORM for Amazon DynamoDB that combines
 - ✅ **Conditional writes** with SQLModel-like syntax
 - ✅ **Atomic updates** without fetching first
 - ✅ **External pagination** for stateless APIs
+- ✅ **Batch operations** with auto-chunking and retry
+- ✅ **ACID transactions** across tables
+- ✅ **TTL support** with automatic datetime/epoch conversion
+- ✅ **Auto-UUID** with `Key(auto=True)` and INSERT-safe `create()`
 
 **Optimized for**: AWS Lambda, serverless functions, FastAPI (with threadpool), batch jobs, and scripts.
 
@@ -43,6 +47,10 @@ Dynantic is a **synchronous-first** Python ORM for Amazon DynamoDB that combines
   - [Querying](#querying)
   - [Atomic Updates](#atomic-updates)
   - [Conditional Writes](#conditional-writes)
+  - [Batch Operations](#batch-operations)
+  - [Transactions](#transactions)
+  - [TTL (Time To Live)](#ttl-time-to-live)
+  - [Auto-UUID](#auto-uuid)
   - [Pagination](#pagination)
   - [Polymorphism](#polymorphism)
 - [Configuration](#configuration)
@@ -136,10 +144,8 @@ User.delete("user-123", "john@example.com")
 ### ❌ What Dynantic Doesn't Do
 
 1. **Async Support**: Synchronous only (use threadpool for FastAPI)
-2. **Transactions**: No `transact_write_items` support yet
-3. **Batch Operations**: No `batch_get_item`/`batch_write_item` yet
-4. **Schema Migrations**: You manage table creation yourself
-5. **Relationships**: No automatic joins (DynamoDB doesn't support them anyway)
+2. **Schema Migrations**: You manage table creation yourself
+3. **Relationships**: No automatic joins (DynamoDB doesn't support them anyway)
 
 ---
 
@@ -484,6 +490,198 @@ User.delete("u1", condition=Attr("legacy_field").not_exists())
 
 ---
 
+### Batch Operations
+
+**Read and write items in bulk** with automatic chunking and exponential backoff retry.
+
+#### Batch Save
+
+```python
+# Save up to thousands of items — auto-chunked into groups of 25
+users = [User(user_id=f"u{i}", name=f"User {i}") for i in range(100)]
+User.batch_save(users)
+```
+
+#### Batch Get
+
+```python
+# Fetch multiple items by key — auto-chunked into groups of 100
+keys = [{"user_id": f"u{i}"} for i in range(100)]
+users = User.batch_get(keys)
+# NOTE: DynamoDB does not guarantee order in batch_get responses
+```
+
+#### Batch Delete
+
+```python
+# Delete multiple items by key — auto-chunked into groups of 25
+User.batch_delete([{"user_id": f"u{i}"} for i in range(50)])
+```
+
+#### Batch Writer (Context Manager)
+
+```python
+# Mix saves and deletes with auto-flush at 25 items
+with User.batch_writer() as batch:
+    batch.save(User(user_id="u100", name="New User"))
+    batch.save(User(user_id="u101", name="Another User"))
+    batch.delete(user_id="u1")
+    batch.delete(user_id="u2")
+```
+
+All batch operations include **exponential backoff retry** for unprocessed items (up to 5 retries). No manual retry logic needed.
+
+---
+
+### Transactions
+
+**ACID transactions** across one or more DynamoDB tables. All operations succeed or all fail.
+
+#### Simple: transact_save
+
+```python
+# Atomically save items (can span multiple tables)
+user = User(user_id="u1", name="Alice")
+order = Order(order_id="o1", amount=99.99)
+DynamoModel.transact_save([user, order])
+```
+
+#### Advanced: transact_write
+
+```python
+from dynantic import Attr, TransactPut, TransactDelete, TransactConditionCheck
+
+DynamoModel.transact_write([
+    # Create-if-not-exists
+    TransactPut(user, condition=Attr("user_id").not_exists()),
+    # Delete with condition
+    TransactDelete(Order, condition=Attr("status") == "cancelled", order_id="o1"),
+    # Validate without modifying
+    TransactConditionCheck(Account, Attr("balance") >= 100, account_id="acc-1"),
+])
+```
+
+#### Atomic Reads: transact_get
+
+```python
+from dynantic import TransactGet
+
+# Get a consistent snapshot of multiple items
+results = DynamoModel.transact_get([
+    TransactGet(User, user_id="u1"),
+    TransactGet(Order, order_id="o1"),
+])
+# results[0] is User | None, results[1] is Order | None
+```
+
+> **Note**: DynamoDB limits transactions to **100 items** per request. Dynantic validates this and raises `ValidationError` if exceeded.
+
+---
+
+### TTL (Time To Live)
+
+**Automatic datetime-to-epoch conversion** for DynamoDB TTL attributes.
+
+```python
+from datetime import datetime, timedelta, timezone
+from dynantic import DynamoModel, Key, TTL
+
+class Session(DynamoModel):
+    session_id: str = Key()
+    user_id: str
+    expires_at: datetime = TTL()  # Stored as epoch seconds in DynamoDB
+
+    class Meta:
+        table_name = "sessions"
+
+# Create with datetime — automatically converted to epoch on save
+session = Session(
+    session_id="sess-123",
+    user_id="user-42",
+    expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+)
+session.save()
+
+# Read back — automatically converted from epoch to datetime
+retrieved = Session.get("sess-123")
+print(isinstance(retrieved.expires_at, datetime))  # True
+```
+
+**TTL field types:**
+- `datetime` — auto-converted to/from epoch seconds (recommended)
+- `int` — passed through as raw epoch seconds
+
+TTL works across all write paths: `save()`, `batch_save()`, `batch_writer()`, `transact_save()`, and `transact_write()`.
+
+> **Note**: TTL must also be enabled on the DynamoDB table itself (via Terraform, CDK, or AWS Console). Dynantic only handles the field serialization.
+
+---
+
+### Auto-UUID
+
+**Automatic UUID4 generation** for partition keys and sort keys. No need to manually generate IDs.
+
+```python
+from uuid import UUID
+from dynantic import DynamoModel, Key
+
+class Product(DynamoModel):
+    product_id: UUID = Key(auto=True)  # Auto-generates UUID4
+    name: str
+    price: float
+
+    class Meta:
+        table_name = "products"
+
+# create() — INSERT semantics (fails if PK already exists)
+product = Product.create(name="Widget", price=29.99)
+print(product.product_id)  # UUID('a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d')
+print(type(product.product_id))  # <class 'uuid.UUID'>
+
+# Explicit UUID still works
+from uuid import UUID
+special = Product.create(product_id=UUID("00000000-..."), name="Promo", price=0.0)
+
+# Duplicate raises ConditionalCheckFailedError
+Product.create(product_id=special.product_id, name="Dup", price=0.0)  # Raises!
+```
+
+The field type is `UUID` — a native Python type. The serializer handles `UUID → str` for DynamoDB automatically, just like it does for `datetime`, `Enum`, and `Decimal`.
+
+**`create()` vs `save()`:**
+- `create()` — INSERT semantics: fails if item already exists (`Attr(pk).not_exists()`)
+- `save()` — UPSERT semantics: overwrites if item exists (unchanged behavior)
+
+**Works with all write paths:**
+```python
+# batch_save — UUID generated at instantiation
+products = [Product(name=f"Item {i}", price=i * 10.0) for i in range(100)]
+Product.batch_save(products)
+
+# save() after create() works as upsert
+product = Product.create(name="Widget", price=29.99)
+product.price = 34.99
+product.save()  # Updates existing item
+```
+
+**`SortKey(auto=True)`** works the same way for composite keys:
+```python
+from uuid import UUID
+from dynantic import DynamoModel, Key, SortKey
+
+class AuditLog(DynamoModel):
+    log_id: UUID = Key(auto=True)
+    entry_id: UUID = SortKey(auto=True)
+    action: str
+
+    class Meta:
+        table_name = "audit_logs"
+```
+
+> **Note**: Auto-UUID uses Python's `uuid4()` — no external dependencies. UUID4 collision probability is negligible (~1 in 2^122), so no retry logic is needed.
+
+---
+
 ### Pagination
 
 **External pagination** lets your API return cursors to clients for stateless pagination.
@@ -822,15 +1020,16 @@ async def create_user(user_data: dict):
 
 ### Current Limitations
 
-| Feature | Status | Workaround / Timeline |
-|---------|--------|------------|
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Batch operations | ✅ **v0.3.0** | `batch_get`, `batch_save`, `batch_delete`, `batch_writer` |
+| Transactions | ✅ **v0.3.0** | `transact_save`, `transact_write`, `transact_get` |
+| TTL fields | ✅ **v0.3.0** | Automatic datetime/epoch conversion with `TTL()` |
+| Auto-UUID | ✅ **v0.3.0** | `Key(auto=True)` + `create()` with INSERT semantics |
 | Async support | ❌ Not planned | Use `asyncio.to_thread()` or aioboto3 directly |
-| Batch operations | 🚧 **Planned for v0.2.0** | Loop with individual operations for now |
-| Transactions | 🚧 **Planned for v0.2.0** | Use conditional writes |
-| Streams | ❌ Not implemented | Use AWS Lambda triggers |
-| TTL fields | ❌ Not implemented | Manually add field & configure table |
-| PartiQL queries | ❌ Not implemented | Use standard query API |
-| Auto-migrations | ❌ Not implemented | Manage tables with IaC (Terraform, CDK) |
+| Streams | ❌ Not planned | Use AWS Lambda triggers |
+| PartiQL queries | ❌ Not planned | Use standard query API |
+| Auto-migrations | ❌ Not planned | Manage tables with IaC (Terraform, CDK) |
 
 ### Design Constraints
 
@@ -911,7 +1110,9 @@ logging.getLogger("dynantic").setLevel(logging.INFO)  # Not DEBUG
       "dynamodb:UpdateItem",
       "dynamodb:DeleteItem",
       "dynamodb:Query",
-      "dynamodb:Scan"
+      "dynamodb:Scan",
+      "dynamodb:BatchGetItem",
+      "dynamodb:BatchWriteItem"
     ],
     "Resource": "arn:aws:dynamodb:*:*:table/your-table-name"
   }]
@@ -949,14 +1150,15 @@ all_orders = list(Order.scan())  # ❌ Expensive!
 customer_orders = Order.query("customer-456").all()  # ✅ Efficient
 ```
 
-### 3. Use Batch Operations (when available)
+### 3. Use Batch Operations
 
 ```python
-# Current: Loop (inefficient)
+# Bad: Loop over individual gets
 for user_id in user_ids:
-   user = User.get(user_id)
+    user = User.get(user_id)  # ❌ N round-trips
 
-# Future: batch_get_item (25x faster - not yet implemented)
+# Good: Batch get (1 call per 100 keys, with retry)
+users = User.batch_get([{"user_id": uid} for uid in user_ids])  # ✅
 ```
 
 ### 4. Configure Boto3 Connection Pool
@@ -982,8 +1184,9 @@ client = boto3.client('dynamodb', config=config)
 | IDE Autocomplete | ✅ Excellent | ✅ Good | ❌ Limited |
 | Query DSL | ✅ Pythonic | ✅ Pythonic | ❌ Dict-based |
 | Async Support | ❌ Sync only | ❌ Sync only | ❌ Sync (use aioboto3 separately) |
-| Batch Ops | 🚧 Planned | ✅ Yes | ✅ Yes |
-| Transactions | 🚧 Planned | ✅ Yes | ✅ Yes |
+| Batch Ops | ✅ Yes | ✅ Yes | ✅ Yes |
+| Transactions | ✅ Yes | ✅ Yes | ✅ Yes |
+| TTL Support | ✅ Auto-convert | ✅ Yes | ❌ Manual |
 | Learning Curve | ⚠️ Medium | ⚠️ Medium | ❌ Steep |
 | Maturity | ⚠️ Beta | ✅ Stable | ✅ AWS Official |
 
@@ -994,7 +1197,6 @@ client = boto3.client('dynamodb', config=config)
 - You're okay using a newer library (beta status)
 
 **When to use PynamoDB:**
-- You need batch operations and transactions **now**
 - You want a mature, battle-tested library
 - You prefer a custom type system over Pydantic
 - You don't need Pydantic's validation features

@@ -32,6 +32,9 @@ class ModelOptions:
     region: str = "us-east-1"
     gsi_definitions: dict[str, GSIDefinition] = field(default_factory=dict)
 
+    # Auto-UUID support
+    auto_uuid_fields: list[str] = field(default_factory=list)
+
     # TTL support
     ttl_field: str | None = None  # Name of the field marked with TTL()
 
@@ -43,6 +46,10 @@ class ModelOptions:
     is_base_entity: bool = False  # True if this model has a discriminator
     parent_model: Any | None = None  # Reference to base class for subclasses
     discriminator_value: str | None = None  # The discriminator value for this subclass
+
+    def has_auto_pk(self) -> bool:
+        """Check if the partition key has auto-UUID generation enabled."""
+        return self.pk_name in self.auto_uuid_fields
 
     def get_gsi(self, index_name: str) -> GSIDefinition | None:
         """

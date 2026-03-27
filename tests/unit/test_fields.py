@@ -101,6 +101,68 @@ class TestSortKeyField:
 
 
 @pytest.mark.unit
+class TestKeyAutoUUID:
+    """Test the auto parameter on Key()."""
+
+    def test_key_auto_injects_auto_uuid_flag(self) -> None:
+        """Test that Key(auto=True) injects _dynamo_auto_uuid flag."""
+        field = Key(auto=True)
+        assert field.json_schema_extra is not None
+        assert field.json_schema_extra["_dynamo_auto_uuid"] is True
+        assert field.json_schema_extra["_dynamo_pk"] is True
+
+    def test_key_auto_has_default_factory_returning_uuid(self) -> None:
+        """Test that Key(auto=True) sets a default_factory returning UUID."""
+        from uuid import UUID
+
+        field = Key(auto=True)
+        assert field.default_factory is not None
+        value = field.default_factory()
+        assert isinstance(value, UUID)
+
+    def test_key_auto_with_default_raises(self) -> None:
+        """Test that Key(auto=True) with explicit default raises."""
+        with pytest.raises(ValueError, match="Cannot use Key\\(auto=True\\)"):
+            Key(default="test", auto=True)
+
+    def test_key_no_auto_no_flag(self) -> None:
+        """Test that Key() without auto has no _dynamo_auto_uuid flag."""
+        field = Key()
+        assert "_dynamo_auto_uuid" not in field.json_schema_extra
+
+
+@pytest.mark.unit
+class TestSortKeyAutoUUID:
+    """Test the auto parameter on SortKey()."""
+
+    def test_sortkey_auto_injects_auto_uuid_flag(self) -> None:
+        """Test that SortKey(auto=True) injects _dynamo_auto_uuid flag."""
+        field = SortKey(auto=True)
+        assert field.json_schema_extra is not None
+        assert field.json_schema_extra["_dynamo_auto_uuid"] is True
+        assert field.json_schema_extra["_dynamo_sk"] is True
+
+    def test_sortkey_auto_has_default_factory_returning_uuid(self) -> None:
+        """Test that SortKey(auto=True) sets a default_factory returning UUID."""
+        from uuid import UUID
+
+        field = SortKey(auto=True)
+        assert field.default_factory is not None
+        value = field.default_factory()
+        assert isinstance(value, UUID)
+
+    def test_sortkey_auto_with_default_raises(self) -> None:
+        """Test that SortKey(auto=True) with explicit default raises."""
+        with pytest.raises(ValueError, match="Cannot use SortKey\\(auto=True\\)"):
+            SortKey(default="test", auto=True)
+
+    def test_sortkey_no_auto_no_flag(self) -> None:
+        """Test that SortKey() without auto has no _dynamo_auto_uuid flag."""
+        field = SortKey()
+        assert "_dynamo_auto_uuid" not in field.json_schema_extra
+
+
+@pytest.mark.unit
 class TestKeySortKeySeparation:
     """Test that Key and SortKey flags are separate."""
 

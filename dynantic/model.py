@@ -332,6 +332,39 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
 
         return BatchWriter(cls, cls._get_client(), cls._serializer, cls._meta.table_name)
 
+    # ── Create (INSERT semantics) ────────────────────────────────
+
+    @classmethod
+    def create(cls: type[T], **kwargs: Any) -> T:
+        """
+        Creates and saves a new item with INSERT semantics (fails if PK already exists).
+
+        Instantiates the model (triggering default_factory for auto-UUID fields),
+        then saves with a condition that the partition key must not exist.
+
+        Args:
+            **kwargs: Model field values
+
+        Returns:
+            The created model instance
+
+        Raises:
+            ConditionalCheckFailedError: If an item with the same key already exists
+
+        Usage:
+            # With auto-UUID
+            item = Item.create(name="Widget")  # item.item_id is auto-generated
+
+            # With explicit PK
+            user = User.create(email="test@example.com", name="Test")
+        """
+        instance = cls(**kwargs)
+        from .conditions import Attr
+
+        condition = Attr(cls._meta.pk_name).not_exists()
+        instance.save(condition=condition)
+        return instance
+
     # ── CRUD Operations ────────────────────────────────────────────
 
     @classmethod
