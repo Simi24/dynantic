@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar
 from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
+    from .batch import BatchWriter
     from .conditions import Condition
     from .pagination import PageResult
     from .scan import DynamoScanBuilder
@@ -72,6 +73,126 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
         Useful for testing or advanced configurations.
         """
         set_client(client)
+
+    # ── Batch Operations ─────────────────────────────────────────────
+
+    @classmethod
+    def batch_get(cls: type[T], keys: list[dict[str, Any]]) -> list[T]:
+        """
+        Fetches multiple items by their keys in a single batch request.
+        Automatically chunks into groups of 100 and retries unprocessed keys.
+
+        Args:
+            keys: List of key dicts, e.g. [{"user_id": "u1"}, {"user_id": "u2"}]
+
+        Returns:
+            List of model instances (order not guaranteed by DynamoDB)
+
+        Usage:
+            users = User.batch_get([{"user_id": "u1"}, {"user_id": "u2"}])
+        """
+        from .batch import batch_get_with_retry
+
+        client = cls._get_client()
+        config = cls._meta
+
+        dynamo_keys = [cls._serializer.to_dynamo(k) for k in keys]
+
+        logger.info(
+            "Batch get",
+            extra={"table": config.table_name, "key_count": len(keys), "operation": "batch_get"},
+        )
+
+        with handle_dynamo_errors(table_name=config.table_name):
+            raw_items = batch_get_with_retry(client, config.table_name, dynamo_keys)
+
+        return [cls._deserialize_item(cls._serializer.from_dynamo(item)) for item in raw_items]
+
+    @classmethod
+    def batch_save(cls: type[T], items: list[T]) -> None:
+        """
+        Saves multiple items in a single batch request.
+        Automatically chunks into groups of 25 and retries unprocessed items.
+
+        Args:
+            items: List of model instances to save
+
+        Usage:
+            User.batch_save([user1, user2, user3])
+        """
+        from .batch import batch_write_with_retry
+
+        client = cls._get_client()
+        config = cls._meta
+
+        requests: list[dict[str, Any]] = []
+        for item in items:
+            data = item.model_dump(mode="python", exclude_none=True)
+            # Handle TTL conversion
+            if config.ttl_field and config.ttl_field in data:
+                ttl_value = data[config.ttl_field]
+                if isinstance(ttl_value, datetime):
+                    data[config.ttl_field] = int(ttl_value.timestamp())
+            dynamo_item = cls._serializer.to_dynamo(data)
+            requests.append({"PutRequest": {"Item": dynamo_item}})
+
+        logger.info(
+            "Batch save",
+            extra={"table": config.table_name, "item_count": len(items), "operation": "batch_save"},
+        )
+
+        with handle_dynamo_errors(table_name=config.table_name):
+            batch_write_with_retry(client, config.table_name, requests)
+
+    @classmethod
+    def batch_delete(cls, keys: list[dict[str, Any]]) -> None:
+        """
+        Deletes multiple items by their keys in a single batch request.
+        Automatically chunks into groups of 25 and retries unprocessed items.
+
+        Args:
+            keys: List of key dicts, e.g. [{"user_id": "u1"}, {"user_id": "u2"}]
+
+        Usage:
+            User.batch_delete([{"user_id": "u1"}, {"user_id": "u2"}])
+        """
+        from .batch import batch_write_with_retry
+
+        client = cls._get_client()
+        config = cls._meta
+
+        requests: list[dict[str, Any]] = []
+        for key in keys:
+            dynamo_key = cls._serializer.to_dynamo(key)
+            requests.append({"DeleteRequest": {"Key": dynamo_key}})
+
+        logger.info(
+            "Batch delete",
+            extra={
+                "table": config.table_name,
+                "key_count": len(keys),
+                "operation": "batch_delete",
+            },
+        )
+
+        with handle_dynamo_errors(table_name=config.table_name):
+            batch_write_with_retry(client, config.table_name, requests)
+
+    @classmethod
+    def batch_writer(cls: type[T]) -> "BatchWriter":
+        """
+        Returns a context manager for mixed batch put/delete operations.
+        Auto-flushes at 25 items and on exit.
+
+        Usage:
+            with User.batch_writer() as batch:
+                batch.save(user1)
+                batch.save(user2)
+                batch.delete(user_id="u3")
+        """
+        from .batch import BatchWriter
+
+        return BatchWriter(cls, cls._get_client(), cls._serializer, cls._meta.table_name)
 
     # ── CRUD Operations ────────────────────────────────────────────
 
