@@ -135,7 +135,7 @@ def handle_dynamo_errors(table_name: str | None = None) -> Generator[None, None,
         if error_code == "ItemCollectionSizeLimitExceededException":
             raise ItemCollectionSizeLimitError(message=error_message, original_error=e) from e
 
-        if error_code == "TransactionConflictException":
+        if error_code in ("TransactionConflictException", "TransactionCanceledException"):
             raise TransactionConflictError(message=error_message, original_error=e) from e
 
         if error_code in ("RequestTimeout", "RequestTimeoutException"):

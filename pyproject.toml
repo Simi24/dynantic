@@ -18,6 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Framework :: Pydantic",
     "Topic :: Database",
 ]
@@ -30,7 +31,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
     "mypy>=1.8.0",
     "ruff>=0.3.0",
@@ -45,7 +45,6 @@ packages = ["dynantic"]
 [dependency-groups]
 dev = [
     "pytest",
-    "pytest-asyncio",
     "pytest-cov",
     "ruff",
     "mypy",
@@ -94,6 +93,5 @@ select = [
 ignore = []
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = "test_*.py"

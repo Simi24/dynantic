@@ -1,6 +1,6 @@
 import pytest
 
-from dynantic.base import DynamoModel
+from dynantic import DynamoModel
 from dynantic.fields import Key
 
 

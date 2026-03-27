@@ -1,6 +1,5 @@
 import pytest
 
-from dynantic import Add, Set
 from dynantic.exceptions import ConditionalCheckFailedError
 
 
@@ -175,8 +174,10 @@ class TestUpdatesIntegration:
         updated = comprehensive_user_model.get("u8")
         assert updated.balance == 100.0  # Unchanged
 
-    def test_convenience_update_item(self, clean_comprehensive_tables, comprehensive_user_model):
-        """Test usage of update_item convenience method."""
+    def test_update_builder_with_return_values(
+        self, clean_comprehensive_tables, comprehensive_user_model
+    ):
+        """Test update builder with multiple actions and return_values."""
         user = comprehensive_user_model(
             user_id="u9",
             email="u9@example.com",
@@ -187,14 +188,13 @@ class TestUpdatesIntegration:
         )
         user.save()
 
-        updated = comprehensive_user_model.update_item(
-            key={"user_id": "u9"},
-            actions=[
-                Set(comprehensive_user_model.status, "active"),
-                Add(comprehensive_user_model.balance, 20.0),
-                Add(comprehensive_user_model.tags, {"B"}),
-            ],
-            return_values="ALL_NEW",
+        updated = (
+            comprehensive_user_model.update("u9")
+            .set(comprehensive_user_model.status, "active")
+            .add(comprehensive_user_model.balance, 20.0)
+            .add(comprehensive_user_model.tags, {"B"})
+            .return_values("ALL_NEW")
+            .execute()
         )
 
         assert updated.status.value == "active"

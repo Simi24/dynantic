@@ -1,5 +1,4 @@
-from .base import DynamoModel
-from .conditions import Attr, Condition, DynCondition
+from .conditions import Attr, Condition
 from .exceptions import (
     ConditionalCheckFailedError,
     DynanticError,
@@ -11,8 +10,10 @@ from .exceptions import (
     TransactionConflictError,
     ValidationError,
 )
-from .fields import Discriminator, GSIKey, GSISortKey, Key, SortKey
+from .fields import TTL, Discriminator, GSIKey, GSISortKey, Key, SortKey
+from .model import DynamoModel
 from .pagination import PageResult
+from .transactions import TransactConditionCheck, TransactDelete, TransactGet, TransactPut
 from .updates import Add, Delete, Remove, Set, UpdateBuilder
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "GSIKey",
     "GSISortKey",
     "Discriminator",
+    "TTL",
     "PageResult",
     # Updates
     "UpdateBuilder",
@@ -29,9 +31,13 @@ __all__ = [
     "Add",
     "Remove",
     "Delete",
+    # Transactions
+    "TransactPut",
+    "TransactDelete",
+    "TransactConditionCheck",
+    "TransactGet",
     # Conditions DSL
     "Attr",  # Primary builder for conditions
-    "DynCondition",  # Wrapper type (rarely used directly)
     "Condition",  # Type alias for type hints
     # Exceptions
     "DynanticError",

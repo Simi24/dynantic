@@ -145,7 +145,6 @@ class TestScanPaginationIntegration:
 
     def test_scan_page_first_page(self, clean_integration_tables, integration_user_model):
         """Test getting the first page of scan results."""
-        # Create multiple users
         users_data = [
             {
                 "email": f"user{i}@example.com",
@@ -156,24 +155,18 @@ class TestScanPaginationIntegration:
             for i in range(10)
         ]
 
-        # Save all users
         for user_data in users_data:
-            user = integration_user_model(**user_data)
-            user.save()
+            integration_user_model(**user_data).save()
 
-        # Get first page
-        page = integration_user_model.scan_page(limit=3)
+        page = integration_user_model.scan().limit(3).page()
 
         assert len(page.items) <= 3
         assert page.count == len(page.items)
-
-        # Should have more pages since we have 10 items and limit is 3
         assert page.has_more is True
         assert page.last_evaluated_key is not None
 
     def test_scan_page_with_cursor(self, clean_integration_tables, integration_user_model):
         """Test getting subsequent pages using cursor."""
-        # Create and save users
         users_data = [
             {
                 "email": f"user{i:02d}@example.com",
@@ -185,27 +178,21 @@ class TestScanPaginationIntegration:
         ]
 
         for user_data in users_data:
-            user = integration_user_model(**user_data)
-            user.save()
+            integration_user_model(**user_data).save()
 
-        # Get first page
-        page1 = integration_user_model.scan_page(limit=3)
+        page1 = integration_user_model.scan().limit(3).page()
+        page2 = integration_user_model.scan().limit(3).page(
+            start_key=page1.last_evaluated_key
+        )
 
-        # Get second page using cursor
-        page2 = integration_user_model.scan_page(limit=3, start_key=page1.last_evaluated_key)
-
-        # Should have different items
         page1_emails = {item.email for item in page1.items}
         page2_emails = {item.email for item in page2.items}
         assert page1_emails.isdisjoint(page2_emails)
-
-        # Both should have items
         assert len(page1.items) > 0
         assert len(page2.items) > 0
 
     def test_scan_page_all_items_loop(self, clean_integration_tables, integration_user_model):
         """Test scanning all items through pagination."""
-        # Create and save users
         users_data = [
             {
                 "email": f"user{i:02d}@example.com",
@@ -217,15 +204,13 @@ class TestScanPaginationIntegration:
         ]
 
         for user_data in users_data:
-            user = integration_user_model(**user_data)
-            user.save()
+            integration_user_model(**user_data).save()
 
-        # Collect all items through pagination
         all_paginated_items = []
         cursor = None
 
         while True:
-            page = integration_user_model.scan_page(limit=4, start_key=cursor)
+            page = integration_user_model.scan().limit(4).page(start_key=cursor)
             all_paginated_items.extend(page.items)
 
             if not page.has_more:
@@ -233,41 +218,15 @@ class TestScanPaginationIntegration:
 
             cursor = page.last_evaluated_key
 
-        # Should get all 15 users
         assert len(all_paginated_items) == 15
 
-        # Verify all emails are present
         result_emails = {item.email for item in all_paginated_items}
         expected_emails = {user["email"] for user in users_data}
         assert result_emails == expected_emails
 
-    def test_scan_page_gsi(
-        self, clean_integration_tables, integration_message_model, sample_messages_data
-    ):
-        """Test scanning a GSI with pagination."""
-        # Save messages in different rooms
-        for msg_data in sample_messages_data:
-            message = integration_message_model(**msg_data)
-            message.save()
-
-        # Scan the GSI (assuming messages have a GSI)
-        # Note: This test assumes the integration_message_model has a GSI defined
-        # If not, this test will be skipped or need adjustment
-        try:
-            page = integration_message_model.scan_page(limit=2, index_name="room_timestamp_index")
-            # If we get here, GSI exists and scan worked
-            assert isinstance(page.items, list)
-            assert page.count == len(page.items)
-        except ValueError as e:
-            # GSI doesn't exist, skip this test
-            if "not defined" in str(e):
-                pytest.skip("GSI not defined for integration_message_model")
-            else:
-                raise
-
     def test_scan_page_empty_table(self, clean_integration_tables, integration_user_model):
         """Test scan page on empty table."""
-        page = integration_user_model.scan_page(limit=10)
+        page = integration_user_model.scan().limit(10).page()
 
         assert page.items == []
         assert page.count == 0

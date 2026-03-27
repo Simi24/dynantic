@@ -645,3 +645,81 @@ def clean_comprehensive_tables(
     except Exception:
         # Ignore cleanup errors
         pass
+
+
+# TTL Test Fixtures
+
+
+@pytest.fixture
+def integration_ttl_model(localstack_client):
+    """
+    Returns a model with a datetime TTL field for integration tests.
+    """
+    from dynantic import TTL, DynamoModel, Key
+
+    class Session(DynamoModel):
+        class Meta:
+            table_name = "integration_test_sessions"
+
+        session_id: str = Key()
+        user_id: str
+        expires_at: datetime = TTL()
+
+    Session.set_client(localstack_client)
+    return Session
+
+
+@pytest.fixture
+def integration_ttl_int_model(localstack_client):
+    """
+    Returns a model with an int TTL field for integration tests.
+    """
+    from dynantic import TTL, DynamoModel, Key
+
+    class Token(DynamoModel):
+        class Meta:
+            table_name = "integration_test_tokens"
+
+        token_id: str = Key()
+        ttl: int = TTL()
+
+    Token.set_client(localstack_client)
+    return Token
+
+
+@pytest.fixture
+def clean_ttl_tables(localstack_helper, integration_ttl_model, integration_ttl_int_model):
+    """Creates fresh tables for TTL integration tests and cleans up after."""
+    localstack_helper.create_table(
+        table_name=integration_ttl_model._meta.table_name,
+        pk_name=integration_ttl_model._meta.pk_name,
+        pk_type="S",
+    )
+    localstack_helper.create_table(
+        table_name=integration_ttl_int_model._meta.table_name,
+        pk_name=integration_ttl_int_model._meta.pk_name,
+        pk_type="S",
+    )
+
+    localstack_helper.clear_table(
+        table_name=integration_ttl_model._meta.table_name,
+        pk_name=integration_ttl_model._meta.pk_name,
+    )
+    localstack_helper.clear_table(
+        table_name=integration_ttl_int_model._meta.table_name,
+        pk_name=integration_ttl_int_model._meta.pk_name,
+    )
+
+    yield
+
+    try:
+        localstack_helper.clear_table(
+            table_name=integration_ttl_model._meta.table_name,
+            pk_name=integration_ttl_model._meta.pk_name,
+        )
+        localstack_helper.clear_table(
+            table_name=integration_ttl_int_model._meta.table_name,
+            pk_name=integration_ttl_int_model._meta.pk_name,
+        )
+    except Exception:
+        pass
