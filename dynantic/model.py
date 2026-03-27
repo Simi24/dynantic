@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 from ._logging import logger, redact_key
 from .client import get_client, set_client, using_client
-from .config import ModelOptions
+from .config import ModelOptions, convert_ttl_fields
 from .exceptions import handle_dynamo_errors
 from .metaclass import DynamoMeta
 from .query import DynamoQueryBuilder
@@ -265,11 +265,7 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
         requests: list[dict[str, Any]] = []
         for item in items:
             data = item.model_dump(mode="python", exclude_none=True)
-            # Handle TTL conversion
-            if config.ttl_field and config.ttl_field in data:
-                ttl_value = data[config.ttl_field]
-                if isinstance(ttl_value, datetime):
-                    data[config.ttl_field] = int(ttl_value.timestamp())
+            convert_ttl_fields(data, config)
             dynamo_item = cls._serializer.to_dynamo(data)
             requests.append({"PutRequest": {"Item": dynamo_item}})
 
@@ -612,10 +608,7 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
         data = self.model_dump(mode="python", exclude_none=True)
 
         # 1b. Convert TTL field to epoch seconds if present
-        if config.ttl_field and config.ttl_field in data:
-            ttl_value = data[config.ttl_field]
-            if isinstance(ttl_value, datetime):
-                data[config.ttl_field] = int(ttl_value.timestamp())
+        convert_ttl_fields(data, config)
 
         # 2. Convert to DynamoDB Format (handling Floats -> Decimals)
         dynamo_item = self._serializer.to_dynamo(data)

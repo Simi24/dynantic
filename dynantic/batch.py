@@ -1,14 +1,13 @@
 """
 Batch operations for Dynantic.
 
-Provides batch_get, batch_write (put + delete), and a BatchWriter
+Provides batch_get, batch_save, batch_delete, and a BatchWriter
 context manager with auto-flush at the DynamoDB 25-item limit.
 """
 
 from __future__ import annotations
 
 import time
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from ._logging import logger
@@ -53,11 +52,9 @@ class BatchWriter:
         data = item.model_dump(mode="python", exclude_none=True)
 
         # Handle TTL conversion
-        config = item._meta
-        if config.ttl_field and config.ttl_field in data:
-            ttl_value = data[config.ttl_field]
-            if isinstance(ttl_value, datetime):
-                data[config.ttl_field] = int(ttl_value.timestamp())
+        from .config import convert_ttl_fields
+
+        convert_ttl_fields(data, item._meta)
 
         dynamo_item = self._serializer.to_dynamo(data)
         self._buffer.append({"PutRequest": {"Item": dynamo_item}})
@@ -84,8 +81,9 @@ class BatchWriter:
     def __enter__(self) -> BatchWriter:
         return self
 
-    def __exit__(self, *args: Any) -> None:
-        self._flush()
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if exc_type is None:
+            self._flush()
 
 
 # ── Internal helpers ───────────────────────────────────────────────
@@ -164,5 +162,7 @@ def _execute_batch_get_chunk(
         )
         time.sleep(BASE_BACKOFF * (2**attempt))
 
-    # Return what we got even if some keys are still unprocessed
-    return all_items
+    raise RuntimeError(
+        f"Failed to get {len(unprocessed_keys)} keys from "
+        f"'{table_name}' after {MAX_RETRIES} retries"
+    )

@@ -1,6 +1,6 @@
 """Unit tests for batch operations."""
 
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -63,6 +63,21 @@ class TestBatchGet:
         results = User.batch_get([{"user_id": "u1"}, {"user_id": "u2"}])
         assert len(results) == 2
         assert mock_client.batch_get_item.call_count == 2
+
+    def test_batch_get_raises_after_max_retries(self):
+        """batch_get raises RuntimeError when unprocessed keys persist after MAX_RETRIES."""
+        mock_client = MagicMock()
+        User.set_client(mock_client)
+
+        mock_client.batch_get_item.return_value = {
+            "Responses": {"users": []},
+            "UnprocessedKeys": {"users": {"Keys": [{"user_id": {"S": "u1"}}]}},
+        }
+
+        with pytest.raises(RuntimeError, match="Failed to get"):
+            User.batch_get([{"user_id": "u1"}])
+
+        assert mock_client.batch_get_item.call_count == 5
 
 
 @pytest.mark.unit
@@ -136,6 +151,18 @@ class TestBatchWriter:
         assert len(requests) == 2
         assert "PutRequest" in requests[0]
         assert "DeleteRequest" in requests[1]
+
+    def test_batch_writer_does_not_flush_on_exception(self):
+        """BatchWriter skips flush if an exception occurred in the with block."""
+        mock_client = MagicMock()
+        User.set_client(mock_client)
+
+        with pytest.raises(ValueError, match="boom"):
+            with User.batch_writer() as batch:
+                batch.save(User(user_id="u1", name="Alice"))
+                raise ValueError("boom")
+
+        mock_client.batch_write_item.assert_not_called()
 
     def test_batch_writer_auto_flushes_at_25(self):
         mock_client = MagicMock()

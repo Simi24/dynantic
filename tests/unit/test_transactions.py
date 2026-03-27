@@ -8,7 +8,6 @@ from dynantic import (
     Attr,
     DynamoModel,
     Key,
-    SortKey,
     TransactConditionCheck,
     TransactDelete,
     TransactGet,
@@ -102,6 +101,35 @@ class TestTransactWrite:
         call_kwargs = mock_client.transact_write_items.call_args[1]
         put = call_kwargs["TransactItems"][0]["Put"]
         assert "ConditionExpression" in put
+
+    def test_transact_delete_serializes_key(self):
+        """TransactDelete serializes key_values into Delete Key."""
+        mock_client = MagicMock()
+        DynamoModel.set_client(mock_client)
+        mock_client.transact_write_items.return_value = {}
+
+        DynamoModel.transact_write([TransactDelete(User, user_id="u1")])
+
+        items = mock_client.transact_write_items.call_args[1]["TransactItems"]
+        delete = items[0]["Delete"]
+        assert delete["TableName"] == "users"
+        assert delete["Key"] == {"user_id": {"S": "u1"}}
+
+    def test_transact_condition_check_serializes_key(self):
+        """TransactConditionCheck serializes key_values into ConditionCheck Key."""
+        mock_client = MagicMock()
+        DynamoModel.set_client(mock_client)
+        mock_client.transact_write_items.return_value = {}
+
+        DynamoModel.transact_write([
+            TransactConditionCheck(User, Attr("status") == "active", user_id="u1"),
+        ])
+
+        items = mock_client.transact_write_items.call_args[1]["TransactItems"]
+        check = items[0]["ConditionCheck"]
+        assert check["TableName"] == "users"
+        assert check["Key"] == {"user_id": {"S": "u1"}}
+        assert "ConditionExpression" in check
 
     def test_transact_delete_with_condition(self):
         mock_client = MagicMock()

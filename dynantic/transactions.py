@@ -7,7 +7,6 @@ TransactWriteItems and TransactGetItems.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -31,10 +30,9 @@ class TransactPut:
         data = self.item.model_dump(mode="python", exclude_none=True)
 
         # Handle TTL conversion
-        if config.ttl_field and config.ttl_field in data:
-            ttl_value = data[config.ttl_field]
-            if isinstance(ttl_value, datetime):
-                data[config.ttl_field] = int(ttl_value.timestamp())
+        from .config import convert_ttl_fields
+
+        convert_ttl_fields(data, config)
 
         dynamo_item = serializer.to_dynamo(data)
 

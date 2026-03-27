@@ -114,3 +114,13 @@ class ModelOptions:
                 f"to {existing.__name__}, cannot register {entity_class.__name__}"
             )
         self.entity_registry[discriminator_value] = entity_class
+
+
+def convert_ttl_fields(data: dict[str, Any], config: ModelOptions) -> None:
+    """Convert datetime TTL fields to epoch seconds in-place."""
+    if config.ttl_field and config.ttl_field in data:
+        from datetime import datetime
+
+        ttl_value = data[config.ttl_field]
+        if isinstance(ttl_value, datetime):
+            data[config.ttl_field] = int(ttl_value.timestamp())
