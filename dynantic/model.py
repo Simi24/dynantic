@@ -8,16 +8,15 @@ query/scan entry points, and polymorphic model registration.
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
     from .batch import BatchWriter
     from .conditions import Condition
-    from .pagination import PageResult
     from .scan import DynamoScanBuilder
-    from .updates import UpdateAction, UpdateBuilder
+    from .updates import UpdateBuilder
 
 from ._logging import logger, redact_key
 from .client import get_client, set_client, using_client
@@ -535,53 +534,6 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
 
         return UpdateBuilder(cls, pk, sk)
 
-    @classmethod
-    def update_item(
-        cls: type[T],
-        key: dict[str, Any],
-        actions: list["UpdateAction"],
-        condition: "Condition | None" = None,
-        return_values: Literal["NONE", "ALL_OLD", "UPDATED_OLD", "ALL_NEW", "UPDATED_NEW"] = "NONE",
-    ) -> Any:
-        """
-        Convenience method to perform updates in one call.
-        Useful when you have a list of pre-built actions.
-
-        Args:
-            key: Dictionary containing pk (and sk if needed)
-            actions: List of UpdateAction objects (Set, Add, Remove, Delete)
-            condition: condition to apply
-            return_values: DynamoDB ReturnValues option
-
-        Usage:
-            User.update_item(
-                key={"pk": "user123"},
-                actions=[
-                    Set(User.name, "New Name"),
-                    Add(User.count, 1)
-                ],
-                return_values="ALL_NEW"
-            )
-        """
-        from .updates import UpdateBuilder
-
-        # Extract pk/sk from key dict
-        pk = key.get(cls._meta.pk_name)
-        if not pk:
-            raise ValueError(f"Key missing partition key '{cls._meta.pk_name}'")
-
-        sk = None
-        if cls._meta.sk_name:
-            sk = key.get(cls._meta.sk_name)
-
-        builder = UpdateBuilder(cls, pk, sk)
-        builder.actions = actions
-        if condition:
-            builder.condition(condition)
-        builder.return_values(return_values)
-
-        return builder.execute()
-
     def patch(self: T) -> "UpdateBuilder":
         """
         Starts an update builder chain for this item.
@@ -818,88 +770,6 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
             return subclass
 
         return decorator
-
-    # ── Scan Page (legacy convenience) ─────────────────────────────
-
-    @classmethod
-    def scan_page(
-        cls: type[T],
-        limit: int | None = None,
-        start_key: dict[str, Any] | None = None,
-        index_name: str | None = None,
-    ) -> "PageResult[T]":
-        """
-        Scans a single page of the table with explicit pagination control.
-
-        Args:
-            limit: Maximum number of items to return in this page
-            start_key: The LastEvaluatedKey from a previous scan_page() call
-            index_name: Optional GSI name to scan
-
-        Returns:
-            PageResult containing items and the cursor for the next page.
-
-        Usage:
-            # First page
-            page1 = User.scan_page(limit=25)
-
-            # Next page
-            if page1.has_more:
-                page2 = User.scan_page(limit=25, start_key=page1.last_evaluated_key)
-        """
-        from .pagination import PageResult
-
-        config = cls._meta
-        client = cls._get_client()
-
-        # Validate GSI if specified
-        if index_name and not config.has_gsi(index_name):
-            raise ValueError(f"GSI '{index_name}' is not defined on model {cls.__name__}")
-
-        # Build scan kwargs
-        kwargs: dict[str, Any] = {"TableName": config.table_name}
-        if index_name:
-            kwargs["IndexName"] = index_name
-        if limit:
-            kwargs["Limit"] = limit
-
-        # If this is a registered subclass, add filter for discriminator
-        if config.discriminator_value and config.discriminator_field:
-            kwargs["FilterExpression"] = "#disc = :disc_val"
-            kwargs["ExpressionAttributeNames"] = {"#disc": config.discriminator_field}
-            kwargs["ExpressionAttributeValues"] = {
-                ":disc_val": cls._serializer.to_dynamo_value(config.discriminator_value)
-            }
-
-        # Add ExclusiveStartKey if cursor provided
-        if start_key:
-            kwargs["ExclusiveStartKey"] = cls._serializer.to_dynamo(start_key)
-
-        logger.info(
-            "Scanning page",
-            extra={
-                "table": config.table_name,
-                "limit": limit,
-                "has_cursor": start_key is not None,
-                "operation": "scan_page",
-            },
-        )
-
-        # Execute single scan (NOT paginator)
-        with handle_dynamo_errors(table_name=config.table_name):
-            response = client.scan(**kwargs)
-
-        # Deserialize items
-        items = [
-            cls._deserialize_item(cls._serializer.from_dynamo(item))
-            for item in response.get("Items", [])
-        ]
-
-        # Get cursor for next page
-        raw_key = response.get("LastEvaluatedKey")
-        cursor = cls._serializer.from_dynamo(raw_key) if raw_key else None
-
-        return PageResult(items=items, last_evaluated_key=cursor, count=len(items))
 
     # ── Deserialization ────────────────────────────────────────────
 

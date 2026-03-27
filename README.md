@@ -705,11 +705,11 @@ if page1.has_more:
 
 ```python
 # First page
-page1 = Product.scan_page(limit=25)
+page1 = Product.scan().limit(25).page()
 
 # Next page
 if page1.has_more:
-    page2 = Product.scan_page(limit=25, start_key=page1.last_evaluated_key)
+    page2 = Product.scan().limit(25).page(start_key=page1.last_evaluated_key)
 ```
 
 #### FastAPI Integration

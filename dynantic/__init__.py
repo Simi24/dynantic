@@ -1,4 +1,4 @@
-from .conditions import Attr, Condition, DynCondition
+from .conditions import Attr, Condition
 from .exceptions import (
     ConditionalCheckFailedError,
     DynanticError,
@@ -38,7 +38,6 @@ __all__ = [
     "TransactGet",
     # Conditions DSL
     "Attr",  # Primary builder for conditions
-    "DynCondition",  # Wrapper type (rarely used directly)
     "Condition",  # Type alias for type hints
     # Exceptions
     "DynanticError",
