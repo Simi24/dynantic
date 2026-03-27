@@ -7,6 +7,7 @@ query/scan entry points, and polymorphic model registration.
 
 from collections.abc import Generator
 from contextlib import contextmanager
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict
@@ -366,6 +367,12 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
         # 1. Dump Pydantic model to dict (preserving types like Sets for serializer)
         data = self.model_dump(mode="python", exclude_none=True)
 
+        # 1b. Convert TTL field to epoch seconds if present
+        if config.ttl_field and config.ttl_field in data:
+            ttl_value = data[config.ttl_field]
+            if isinstance(ttl_value, datetime):
+                data[config.ttl_field] = int(ttl_value.timestamp())
+
         # 2. Convert to DynamoDB Format (handling Floats -> Decimals)
         dynamo_item = self._serializer.to_dynamo(data)
 
@@ -619,6 +626,17 @@ class DynamoModel(BaseModel, metaclass=DynamoMeta):
             Instance of the correct model type
         """
         config = cls._meta
+
+        # Convert TTL epoch seconds back to datetime if needed
+        if config.ttl_field and config.ttl_field in raw_data:
+            ttl_value = raw_data[config.ttl_field]
+            # Check if the model expects datetime but we got an int/Decimal (epoch)
+            field_info = cls.model_fields.get(config.ttl_field)
+            is_datetime_field = field_info and field_info.annotation is datetime
+            if is_datetime_field and isinstance(ttl_value, (int, float)):
+                from datetime import timezone
+
+                raw_data[config.ttl_field] = datetime.fromtimestamp(int(ttl_value), tz=timezone.utc)
 
         # If this is a polymorphic base class, look up the correct subclass
         if config.is_base_entity and config.discriminator_field:

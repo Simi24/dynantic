@@ -133,10 +133,11 @@ class DynamoMeta(ModelMetaclass):
         if not hasattr(meta_cls, "table_name"):
             raise ValueError(f"Model {name} is missing a 'table_name' in class Meta.")
 
-        # 3. Scan fields to find Primary Key, Sort Key, Discriminator, and GSI definitions
+        # 3. Scan fields to find Primary Key, Sort Key, Discriminator, TTL, and GSI definitions
         pk_name: str | None = None
         sk_name: str | None = None
         discriminator_field: str | None = None
+        ttl_field: str | None = None
 
         # Track GSI keys: {index_name: {"pk": field_name, "sk": field_name}}
         gsi_keys: dict[str, dict[str, str]] = {}
@@ -162,6 +163,21 @@ class DynamoMeta(ModelMetaclass):
                 if discriminator_field is not None:
                     raise ValueError(f"Model {name} can have only one Discriminator() field")
                 discriminator_field = field_name
+
+            # TTL field
+            if extra.get("_dynamo_ttl"):
+                if ttl_field is not None:
+                    raise ValueError(f"Model {name} can have only one TTL() field")
+                # Validate type: must be datetime or int
+                from datetime import datetime
+
+                annotation = field_info.annotation
+                if annotation not in (datetime, int):
+                    raise ValueError(
+                        f"TTL field '{field_name}' in model {name} must be typed as "
+                        f"datetime or int, got {annotation}"
+                    )
+                ttl_field = field_name
 
             # GSI keys
             if "_dynamo_gsi_pk" in extra:
@@ -217,6 +233,7 @@ class DynamoMeta(ModelMetaclass):
             sk_name=sk_name,
             region=getattr(meta_cls, "region", "us-east-1"),
             gsi_definitions=gsi_definitions,
+            ttl_field=ttl_field,
             discriminator_field=discriminator_field,
             entity_registry={},  # Empty, will be populated by @register
             is_base_entity=discriminator_field is not None,

@@ -10,7 +10,7 @@ from .exceptions import (
     TransactionConflictError,
     ValidationError,
 )
-from .fields import Discriminator, GSIKey, GSISortKey, Key, SortKey
+from .fields import TTL, Discriminator, GSIKey, GSISortKey, Key, SortKey
 from .model import DynamoModel
 from .pagination import PageResult
 from .updates import Add, Delete, Remove, Set, UpdateBuilder
@@ -22,6 +22,7 @@ __all__ = [
     "GSIKey",
     "GSISortKey",
     "Discriminator",
+    "TTL",
     "PageResult",
     # Updates
     "UpdateBuilder",

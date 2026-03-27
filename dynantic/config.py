@@ -32,6 +32,9 @@ class ModelOptions:
     region: str = "us-east-1"
     gsi_definitions: dict[str, GSIDefinition] = field(default_factory=dict)
 
+    # TTL support
+    ttl_field: str | None = None  # Name of the field marked with TTL()
+
     # Polymorphism support
     discriminator_field: str | None = None  # Name of the discriminator field
     entity_registry: dict[str, Any] = field(

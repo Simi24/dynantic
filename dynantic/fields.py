@@ -101,6 +101,32 @@ def GSISortKey(index_name: str, default: Any = ..., **kwargs: Any) -> Any:
     return Field(default, json_schema_extra=json_schema_extra, **kwargs)
 
 
+def TTL(default: Any = ..., **kwargs: Any) -> Any:
+    """
+    Marks a Pydantic field as the DynamoDB TTL (Time To Live) attribute.
+
+    The field should be typed as `datetime` (auto-converted to epoch seconds)
+    or `int` (passed through as epoch seconds).
+
+    Usage:
+        expires_at: datetime = TTL()
+
+    Note:
+        TTL must be enabled on the DynamoDB table separately (via Terraform/CLI).
+        Dynantic only handles correct serialization of the field value.
+
+    Args:
+        default: Default value for the field
+        **kwargs: Additional Pydantic Field arguments
+
+    Returns:
+        Pydantic Field instance with TTL metadata
+    """
+    json_schema_extra = kwargs.pop("json_schema_extra", {})
+    json_schema_extra["_dynamo_ttl"] = True
+    return Field(default, json_schema_extra=json_schema_extra, **kwargs)
+
+
 def Discriminator(default: Any = ..., **kwargs: Any) -> Any:
     """
     Marks a Pydantic field as the discriminator for polymorphic models.
