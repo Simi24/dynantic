@@ -11,7 +11,6 @@ from dynantic import (
     Attr,
     DynamoModel,
     Key,
-    TransactConditionCheck,
     TransactDelete,
     TransactGet,
     TransactPut,
@@ -52,10 +51,9 @@ print("Created 2 accounts atomically")
 
 # Transfer $200 from Alice to Bob with safety checks.
 # This single transaction:
-#   1. Checks Alice is active and has enough funds
-#   2. Updates Alice's balance (via Put with new state)
-#   3. Updates Bob's balance (via Put with new state)
-#   4. Records the transfer
+#   1. Updates Alice's balance with a condition verifying she is active with enough funds
+#   2. Updates Bob's balance (via Put with new state)
+#   3. Records the transfer
 
 transfer = Transfer(
     transfer_id="tx-001",
@@ -66,14 +64,11 @@ transfer = Transfer(
 
 DynamoModel.transact_write(
     [
-        # Verify Alice is active before allowing the transfer
-        TransactConditionCheck(
-            Account,
-            (Attr("active") == True) & (Attr("balance") >= 200),  # noqa: E712
-            account_id="acc-1",
+        # Write updated balances (condition verifies Alice is active with enough funds)
+        TransactPut(
+            Account(account_id="acc-1", owner="Alice", balance=800.0),
+            condition=(Attr("active") == True) & (Attr("balance") >= 200),  # noqa: E712
         ),
-        # Write updated balances
-        TransactPut(Account(account_id="acc-1", owner="Alice", balance=800.0)),
         TransactPut(Account(account_id="acc-2", owner="Bob", balance=700.0)),
         # Record the transfer
         TransactPut(transfer),
