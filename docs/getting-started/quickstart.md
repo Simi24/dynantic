@@ -89,4 +89,4 @@ user = User.query("user-123").eq("john@example.com").first()
 - [Model Definition](../guide/models.md) — Field types, GSIs, type support
 - [CRUD Operations](../guide/crud.md) — Full create/read/update/delete guide
 - [Querying](../guide/querying.md) — Sort key conditions, filtering, scanning
-- **Atomic Updates** — Update without fetching
+- [Atomic Updates](../guide/updates.md) — Update without fetching

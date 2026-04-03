@@ -22,7 +22,7 @@ This raises `ConditionalCheckFailedError` if the item already exists.
 
 ### INSERT Semantics with `create()`
 
-For models with Auto-UUID keys, `create()` guarantees insert-only semantics:
+For models with [Auto-UUID](auto-uuid.md) keys, `create()` guarantees insert-only semantics:
 
 ```python
 class Task(DynamoModel):
@@ -64,7 +64,7 @@ product.save()
 
 ### Atomic updates (no fetch required)
 
-For atomic, server-side updates without a round-trip, see the Atomic Updates guide.
+For atomic, server-side updates without a round-trip, see [Atomic Updates](updates.md).
 
 ```python
 Product.update("prod-123") \

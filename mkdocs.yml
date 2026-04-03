@@ -78,3 +78,28 @@ nav:
     - Model Definition: guide/models.md
     - CRUD Operations: guide/crud.md
     - Querying: guide/querying.md
+    - Atomic Updates: guide/updates.md
+    - Conditional Writes: guide/conditions.md
+    - Batch Operations: guide/batch.md
+    - Transactions: guide/transactions.md
+    - Pagination: guide/pagination.md
+    - TTL: guide/ttl.md
+    - Auto-UUID: guide/auto-uuid.md
+    - Polymorphism: guide/polymorphism.md
+  - Integration:
+    - FastAPI: integration/fastapi.md
+    - Configuration: integration/configuration.md
+    - LocalStack Testing: integration/localstack.md
+  - API Reference:
+    - DynamoModel: reference/model.md
+    - Fields: reference/fields.md
+    - Conditions: reference/conditions.md
+    - QueryBuilder: reference/query.md
+    - ScanBuilder: reference/scan.md
+    - Updates: reference/updates.md
+    - Transactions: reference/transactions.md
+    - Batch: reference/batch.md
+    - Pagination: reference/pagination.md
+    - Client: reference/client.md
+    - Exceptions: reference/exceptions.md
+  - Comparison: comparison.md
