@@ -122,7 +122,6 @@ jobs:
       run: |
         uv sync --dev
 
-    - name: Build documentation
+    - name: Validate documentation build
       run: |
-        # Add documentation build steps here if you have docs
-        echo "Documentation build would go here"
+        uv run mkdocs build --strict
