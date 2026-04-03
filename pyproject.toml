@@ -35,6 +35,9 @@ dev = [
     "mypy>=1.8.0",
     "ruff>=0.3.0",
     "boto3-stubs[essential]",
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.25.0",
 ]
 
 # --- Configuration Tooling ---
@@ -49,6 +52,9 @@ dev = [
     "ruff",
     "mypy",
     "boto3-stubs[essential]",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
 ]
 
 [tool.mypy]
