@@ -1,3 +1,9 @@
+"""Field descriptors for Dynantic model definitions.
+
+Provides ``Key``, ``SortKey``, ``GSIKey``, ``GSISortKey``, ``TTL``,
+and ``Discriminator`` field factories for defining DynamoDB table schemas.
+"""
+
 from typing import Any
 from uuid import uuid4
 

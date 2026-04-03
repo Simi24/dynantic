@@ -71,3 +71,15 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - API Reference:
+    - DynamoModel: reference/model.md
+    - Fields: reference/fields.md
+    - Conditions: reference/conditions.md
+    - QueryBuilder: reference/query.md
+    - ScanBuilder: reference/scan.md
+    - Updates: reference/updates.md
+    - Transactions: reference/transactions.md
+    - Batch: reference/batch.md
+    - Pagination: reference/pagination.md
+    - Client: reference/client.md
+    - Exceptions: reference/exceptions.md

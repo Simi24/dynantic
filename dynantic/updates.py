@@ -353,6 +353,16 @@ class UpdateBuilder:
         return result
 
     def execute(self) -> Any:
+        """Execute the atomic update against DynamoDB.
+
+        Returns:
+            The deserialized model if ``return_values`` is ``"ALL_NEW"``,
+            otherwise the raw DynamoDB response dict.
+
+        Raises:
+            ConditionalCheckFailedError: If the condition expression is not satisfied.
+            ValueError: If no update actions have been specified.
+        """
         # Build Key
         key_dict = {self.model_cls._meta.pk_name: self.pk}
         if self.sk and self.model_cls._meta.sk_name:

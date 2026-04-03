@@ -1,3 +1,9 @@
+"""Query builder for Dynantic.
+
+Provides ``QueryBuilder`` for constructing DynamoDB queries with
+sort key conditions, filtering, pagination, and GSI support.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Iterator

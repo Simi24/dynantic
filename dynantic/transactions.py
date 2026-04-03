@@ -17,13 +17,22 @@ TRANSACT_LIMIT = 100
 
 
 class TransactPut:
-    """Wraps a model instance for transactional put."""
+    """Wraps a model instance for transactional put.
+
+    Args:
+        item: The DynamoModel instance to save.
+        condition: Optional condition expression that must be satisfied for the put to succeed.
+
+    Example:
+        TransactPut(user, condition=Attr("user_id").not_exists())
+    """
 
     def __init__(self, item: DynamoModel, condition: Condition | None = None) -> None:
         self.item = item
         self.condition = condition
 
     def _to_transact_item(self) -> dict[str, Any]:
+        """Build the DynamoDB TransactWriteItem dict for this put operation."""
         config = self.item._meta
         serializer = self.item._serializer
 
@@ -51,7 +60,16 @@ class TransactPut:
 
 
 class TransactDelete:
-    """Wraps a delete operation for transactional delete."""
+    """Wraps a delete operation for transactional delete.
+
+    Args:
+        model_cls: The DynamoModel class of the item to delete.
+        condition: Optional condition expression that must be satisfied for the delete to succeed.
+        **key_values: Primary key values identifying the item to delete.
+
+    Example:
+        TransactDelete(Order, condition=Attr("status") == "cancelled", order_id="o1")
+    """
 
     def __init__(
         self,
@@ -64,6 +82,7 @@ class TransactDelete:
         self.condition = condition
 
     def _to_transact_item(self) -> dict[str, Any]:
+        """Build the DynamoDB TransactWriteItem dict for this delete operation."""
         config = self.model_cls._meta
         serializer = self.model_cls._serializer
 
@@ -84,7 +103,16 @@ class TransactDelete:
 
 
 class TransactConditionCheck:
-    """Wraps a condition check for transactional validation."""
+    """Wraps a condition check for transactional validation without modifying the item.
+
+    Args:
+        model_cls: The DynamoModel class of the item to check.
+        condition: Condition expression that must be satisfied for the transaction to succeed.
+        **key_values: Primary key values identifying the item to check.
+
+    Example:
+        TransactConditionCheck(Account, Attr("balance") >= 100, account_id="acc-1")
+    """
 
     def __init__(
         self,
@@ -97,6 +125,7 @@ class TransactConditionCheck:
         self.condition = condition
 
     def _to_transact_item(self) -> dict[str, Any]:
+        """Build the DynamoDB TransactWriteItem dict for this condition check."""
         from .conditions import compile_condition
 
         config = self.model_cls._meta
@@ -116,13 +145,22 @@ class TransactConditionCheck:
 
 
 class TransactGet:
-    """Wraps a get operation for transactional reads."""
+    """Wraps a get operation for transactional reads.
+
+    Args:
+        model_cls: The DynamoModel class of the item to read.
+        **key_values: Primary key values identifying the item to read.
+
+    Example:
+        TransactGet(User, user_id="u1")
+    """
 
     def __init__(self, model_cls: type[DynamoModel], **key_values: Any) -> None:
         self.model_cls = model_cls
         self.key_values = key_values
 
     def _to_transact_item(self) -> dict[str, Any]:
+        """Build the DynamoDB TransactGetItem dict for this get operation."""
         config = self.model_cls._meta
         serializer = self.model_cls._serializer
 
