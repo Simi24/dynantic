@@ -71,3 +71,8 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Integration:
+    - FastAPI: integration/fastapi.md
+    - Configuration: integration/configuration.md
+    - LocalStack Testing: integration/localstack.md
+  - Comparison: comparison.md
