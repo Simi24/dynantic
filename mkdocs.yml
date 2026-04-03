@@ -71,3 +71,10 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+  - Guide:
+    - Model Definition: guide/models.md
+    - CRUD Operations: guide/crud.md
+    - Querying: guide/querying.md
