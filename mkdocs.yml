@@ -71,3 +71,12 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Guide:
+    - Atomic Updates: guide/updates.md
+    - Conditional Writes: guide/conditions.md
+    - Batch Operations: guide/batch.md
+    - Transactions: guide/transactions.md
+    - Pagination: guide/pagination.md
+    - TTL: guide/ttl.md
+    - Auto-UUID: guide/auto-uuid.md
+    - Polymorphism: guide/polymorphism.md
