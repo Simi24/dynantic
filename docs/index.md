@@ -1,6 +1,6 @@
 <div align="center" markdown>
 
-![Dynantic](assets/dyno_dynantic.png){ width="400" }
+![Dynantic](assets/dyno.png){ width="400" }
 
 # Dynantic
 

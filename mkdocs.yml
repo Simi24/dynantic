@@ -34,8 +34,8 @@ theme:
     - toc.follow
   icon:
     repo: fontawesome/brands/github
-  logo: assets/dyno_dynantic.png
-  favicon: assets/dyno_dynantic.png
+  logo: assets/dyno.png
+  favicon: assets/dyno.png
 
 plugins:
   - search
