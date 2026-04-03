@@ -45,4 +45,4 @@ Dynantic uses **boto3** under the hood, so it follows the standard AWS credentia
 !!! tip "Lambda / ECS"
     On AWS Lambda or ECS, credentials are provided automatically via the execution role. No configuration needed.
 
-For local development with LocalStack, see the Integration guide.
+For local development with [LocalStack](../integration/localstack.md), see the integration guide.
