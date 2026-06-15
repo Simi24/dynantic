@@ -102,6 +102,49 @@ results = (
 | `\|` | OR | `(Attr("a") > 1) \| (Attr("b") < 10)` |
 | `~` | NOT | `~Attr("deleted").exists()` |
 
+## Counting
+
+Use `.count()` to get the number of matching items without materializing them.
+DynamoDB counts server-side via `Select=COUNT`, so no items are deserialized.
+
+```python
+# Count all items for a partition key
+total = Message.query("room-1").count()
+
+# With a sort key condition
+recent = Message.query("room-1").starts_with("2024-").count()
+
+# With a filter
+active = User.scan().filter(Attr("status") == "active").count()
+```
+
+!!! note "Filters and capacity"
+    A filtered `count()` still consumes read capacity for every scanned item —
+    only the matched items are reflected in the returned number.
+
+## Projections (`.values()` / `.values_list()`)
+
+To fetch only a subset of attributes, use the projection terminals. They return
+**plain dicts** (not model instances): projections are partial data, so they
+intentionally bypass Pydantic validation and keep your model instances always
+complete and valid.
+
+```python
+# Returns a list of dicts with only the requested fields
+rows = User.query("tenant-1").values("email", "status")
+# [{"email": "a@b.com", "status": "active"}, ...]
+
+# Single column as a flat list
+emails = User.query("tenant-1").values_list("email")
+# ["a@b.com", "c@d.com", ...]
+
+# Works on scans too
+active_emails = User.scan().filter(Attr("status") == "active").values("email")
+```
+
+`.values()` builds a DynamoDB `ProjectionExpression`, reducing payload size (and
+RCU on large items). Field names accept `Attr` objects or plain strings.
+
 ## Metaclass DSL vs Attr()
 
 Dynantic provides a metaclass-based DSL that lets you use model fields directly in filter expressions:

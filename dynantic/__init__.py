@@ -14,7 +14,7 @@ from .fields import TTL, Discriminator, GSIKey, GSISortKey, Key, SortKey
 from .model import DynamoModel
 from .pagination import PageResult
 from .transactions import TransactConditionCheck, TransactDelete, TransactGet, TransactPut
-from .updates import Add, Delete, Remove, Set, UpdateBuilder
+from .updates import Add, Append, Delete, Remove, Set, SetIfNotExists, UpdateBuilder
 
 __all__ = [
     "DynamoModel",
@@ -28,6 +28,8 @@ __all__ = [
     # Updates
     "UpdateBuilder",
     "Set",
+    "SetIfNotExists",
+    "Append",
     "Add",
     "Remove",
     "Delete",

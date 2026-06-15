@@ -69,6 +69,9 @@ class DynamoScanBuilder(BaseBuilder[T]):
 
         return kwargs
 
+    def _resolve_executable(self) -> tuple[str, dict[str, Any]]:
+        return "scan", self._build_scan_kwargs()
+
     def __iter__(self) -> Iterator[T]:
         """
         Lazy Execution: The scan is sent to DynamoDB only when iteration starts.

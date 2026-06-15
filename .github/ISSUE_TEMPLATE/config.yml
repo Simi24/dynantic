@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://simi24.github.io/dynantic
+    about: Check the docs before opening an issue.
+  - name: Questions & Discussions
+    url: https://github.com/Simi24/dynantic/discussions
+    about: Ask questions and discuss ideas here.

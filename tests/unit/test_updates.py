@@ -15,6 +15,7 @@ class User(DynamoModel):
     age: int | None = None
     tags: set[str] | None = None
     score: float | None = None
+    events: list[str] | None = None
 
 
 def test_update_builder_init():
@@ -144,6 +145,44 @@ def test_condition_integration():
     # For User.age > 18: name placeholder for age, value placeholder for 18
     assert len(params["ExpressionAttributeNames"]) >= 2
     assert len(params["ExpressionAttributeValues"]) >= 2
+
+
+def test_set_if_not_exists_compilation():
+    builder = User.update("pk").set_if_not_exists(User.name, "Alice")
+    params = builder._compile()
+    assert params["UpdateExpression"] == "SET #u_n0 = if_not_exists(#u_n0, :u_v0)"
+    assert params["ExpressionAttributeNames"] == {"#u_n0": "name"}
+    assert params["ExpressionAttributeValues"] == {":u_v0": {"S": "Alice"}}
+
+
+def test_append_compilation():
+    builder = User.update("pk").append(User.events, ["login"])
+    params = builder._compile()
+    assert params["UpdateExpression"] == "SET #u_n0 = list_append(#u_n0, :u_v0)"
+    assert params["ExpressionAttributeNames"] == {"#u_n0": "events"}
+    assert params["ExpressionAttributeValues"] == {":u_v0": {"L": [{"S": "login"}]}}
+
+
+def test_append_requires_list():
+    builder = User.update("pk").append(User.name, "not-a-list")
+    with pytest.raises(ValueError, match="list_append requires a list"):
+        builder._compile()
+
+
+def test_set_family_grouped_in_single_set_clause():
+    builder = (
+        User.update("pk")
+        .set(User.name, "Bob")
+        .set_if_not_exists(User.age, 1)
+        .append(User.events, ["x"])
+    )
+    expr = builder._compile()["UpdateExpression"]
+
+    # All three are SET-family -> one SET clause, no other keywords
+    assert expr.startswith("SET ")
+    assert "if_not_exists(" in expr
+    assert "list_append(" in expr
+    assert "REMOVE" not in expr and "ADD" not in expr and "DELETE" not in expr
 
 
 def test_reserved_keywords_aliasing():

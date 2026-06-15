@@ -6,6 +6,8 @@
 
 **Type-safe DynamoDB ORM with Pydantic validation**
 
+[![CI](https://github.com/Simi24/dynantic/actions/workflows/ci.yml/badge.svg)](https://github.com/Simi24/dynantic/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Simi24/dynantic/branch/main/graph/badge.svg)](https://codecov.io/gh/Simi24/dynantic)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/dynantic)](https://pypi.org/project/dynantic/)
@@ -26,7 +28,8 @@ Dynantic is a **synchronous-first** Python ORM for Amazon DynamoDB that combines
 - Global Secondary Indexes (GSI)
 - Polymorphic models for single-table design
 - Conditional writes with SQLModel-like syntax
-- Atomic updates without fetching first
+- Atomic updates without fetching first (`add`, `set_if_not_exists`, `append`)
+- Projection queries (`.values()`) and server-side counts (`.count()`)
 - Batch operations with auto-chunking and retry
 - ACID transactions across tables
 - TTL support with automatic datetime/epoch conversion

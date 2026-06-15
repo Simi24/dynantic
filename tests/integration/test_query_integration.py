@@ -301,3 +301,53 @@ class TestQueryBuilderIntegration:
         general_timestamps = {r.timestamp for r in general_results}
         python_timestamps = {r.timestamp for r in python_results}
         assert general_timestamps.isdisjoint(python_timestamps)
+
+
+@pytest.mark.integration
+class TestQueryCountAndProjection:
+    """Test .count() and .values()/.values_list() against LocalStack."""
+
+    def _seed_general(self, model, sample_messages_data):
+        saved = [d for d in sample_messages_data if d["room_id"] == "general"]
+        for d in saved:
+            model(**d).save()
+        return saved
+
+    def test_count_matches_number_of_items(
+        self, clean_integration_tables, integration_message_model, sample_messages_data
+    ):
+        saved = self._seed_general(integration_message_model, sample_messages_data)
+
+        count = integration_message_model.query("general").count()
+
+        assert count == len(saved)
+
+    def test_count_with_filter(
+        self, clean_integration_tables, integration_message_model, sample_messages_data
+    ):
+        from dynantic import Attr
+
+        self._seed_general(integration_message_model, sample_messages_data)
+
+        count = integration_message_model.query("general").filter(Attr("user") == "alice").count()
+
+        assert count == 1
+
+    def test_values_projects_only_requested_fields(
+        self, clean_integration_tables, integration_message_model, sample_messages_data
+    ):
+        saved = self._seed_general(integration_message_model, sample_messages_data)
+
+        rows = integration_message_model.query("general").values("user")
+
+        assert len(rows) == len(saved)
+        assert all(set(row.keys()) == {"user"} for row in rows)
+
+    def test_values_list_returns_flat_column(
+        self, clean_integration_tables, integration_message_model, sample_messages_data
+    ):
+        saved = self._seed_general(integration_message_model, sample_messages_data)
+
+        users = integration_message_model.query("general").values_list("user")
+
+        assert sorted(users) == sorted(d["user"] for d in saved)

@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -78,6 +79,47 @@ class Set(UpdateAction):
             except ValidationError as e:
                 raise ValueError(f"Validation failed for field '{self.field_name}': {e}") from e
         return self.value
+
+    def render_clause(
+        self, get_name_ph: Callable[[str], str], get_value_ph: Callable[[Any], str]
+    ) -> str:
+        """Renders the SET assignment clause for this action."""
+        return f"{get_name_ph(self.field_name)} = {get_value_ph(self.value)}"
+
+
+class SetIfNotExists(Set):
+    """
+    Represents a SET with ``if_not_exists`` — only writes if the attribute is absent.
+    User.update(...).set_if_not_exists(User.created_at, now)
+    """
+
+    def render_clause(
+        self, get_name_ph: Callable[[str], str], get_value_ph: Callable[[Any], str]
+    ) -> str:
+        name_ph = get_name_ph(self.field_name)
+        return f"{name_ph} = if_not_exists({name_ph}, {get_value_ph(self.value)})"
+
+
+class Append(Set):
+    """
+    Represents a SET with ``list_append`` — appends to an existing list.
+    User.update(...).append(User.events, ["login"])
+    """
+
+    def validate(self, model_cls: type[DynamoModel]) -> Any:
+        validated = super().validate(model_cls)
+        if not isinstance(validated, list):
+            raise ValueError(
+                f"Invalid value for append on field '{self.field_name}'. "
+                f"list_append requires a list. Got: {type(self.value).__name__}"
+            )
+        return validated
+
+    def render_clause(
+        self, get_name_ph: Callable[[str], str], get_value_ph: Callable[[Any], str]
+    ) -> str:
+        name_ph = get_name_ph(self.field_name)
+        return f"{name_ph} = list_append({name_ph}, {get_value_ph(self.value)})"
 
 
 class Remove(UpdateAction):
@@ -178,6 +220,26 @@ class UpdateBuilder:
         self.actions.append(Set(field, value))
         return self
 
+    def set_if_not_exists(self, field: Any, value: Any) -> UpdateBuilder:
+        """
+        Set a field value only if it does not already exist (``if_not_exists``).
+
+        Usage:
+            user.set_if_not_exists(User.created_at, now)
+        """
+        self.actions.append(SetIfNotExists(field, value))
+        return self
+
+    def append(self, field: Any, value: list[Any]) -> UpdateBuilder:
+        """
+        Append items to an existing list field (``list_append``).
+
+        Usage:
+            user.append(User.events, ["login"])
+        """
+        self.actions.append(Append(field, value))
+        return self
+
     def remove(self, field: Attr | str) -> UpdateBuilder:
         """
         Remove a field.
@@ -249,8 +311,8 @@ class UpdateBuilder:
             # Pydantic Validation
             validated_value = action.validate(self.model_cls)
 
-            # Helper: Handle Set(None) -> Remove
-            if isinstance(action, Set) and validated_value is None:
+            # Helper: Handle Set(None) -> Remove (plain Set only, not functional variants)
+            if type(action) is Set and validated_value is None:
                 remove_actions.append(Remove(action.field_name))
                 continue
 
@@ -296,11 +358,7 @@ class UpdateBuilder:
             return ph
 
         if set_actions:
-            clauses = []
-            for sa in set_actions:
-                n = get_name_ph(sa.field_name)
-                v = get_value_ph(sa.value)
-                clauses.append(f"{n} = {v}")
+            clauses = [sa.render_clause(get_name_ph, get_value_ph) for sa in set_actions]
             parts.append("SET " + ", ".join(clauses))
 
         if remove_actions:

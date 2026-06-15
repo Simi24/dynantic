@@ -124,7 +124,96 @@ class BaseBuilder(Iterable[T]):
             raise ValueError(f"No items found for this {self._operation_name}")
         return item
 
+    def count(self) -> int:
+        """
+        Returns the number of matching items without materializing them.
+
+        Uses DynamoDB's ``Select=COUNT`` so items are counted server-side
+        (filters still consume Read Capacity Units for every scanned item).
+        Honors any ``filter()`` and ``limit()`` already set on the builder.
+        """
+        operation, kwargs = self._resolve_executable()
+        kwargs["Select"] = "COUNT"
+        kwargs.pop("ProjectionExpression", None)
+
+        total = 0
+        with handle_dynamo_errors(table_name=self.config.table_name):
+            paginator = self.client.get_paginator(operation)
+            for page in paginator.paginate(**kwargs):
+                total += page.get("Count", 0)
+                if self.limit_val is not None and total >= self.limit_val:
+                    return self.limit_val
+        return total
+
+    def values(self, *fields: Any) -> list[dict[str, Any]]:
+        """
+        Projects a subset of attributes, returning raw dicts (not model instances).
+
+        Projection returns partial data, so it intentionally bypasses Pydantic
+        validation and returns plain dicts with native Python types. This keeps
+        model instances always complete and valid.
+
+        Args:
+            fields: Attribute names as ``Attr`` objects or plain strings.
+
+        Usage:
+            rows = User.query("tenant#1").values("email", "status")
+        """
+        if not fields:
+            raise ValueError("values() requires at least one field")
+
+        field_names = [self._resolve_field_name(f) for f in fields]
+        operation, kwargs = self._resolve_executable()
+        self._apply_projection(field_names, kwargs)
+        return list(self._paginate_raw(operation, kwargs))
+
+    def values_list(self, field: Any) -> list[Any]:
+        """
+        Projects a single attribute, returning a flat list of its values.
+
+        Missing attributes on an item yield ``None``.
+
+        Usage:
+            emails = User.query("tenant#1").values_list("email")
+        """
+        name = self._resolve_field_name(field)
+        return [row.get(name) for row in self.values(field)]
+
     # ── Helpers ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _resolve_field_name(field: Any) -> str:
+        """Resolves an Attr or str into the underlying attribute name."""
+        from .conditions import Attr
+
+        return field.name if isinstance(field, Attr) else field
+
+    def _apply_projection(self, fields: list[str], kwargs: dict[str, Any]) -> None:
+        """Adds a ProjectionExpression for the given attribute names to kwargs."""
+        names = kwargs.setdefault("ExpressionAttributeNames", {})
+        placeholders: dict[str, str] = {}
+        proj_parts: list[str] = []
+
+        for real_name in fields:
+            if real_name not in placeholders:
+                ph = f"#p_n{len(placeholders)}"
+                placeholders[real_name] = ph
+                names[ph] = real_name
+            proj_parts.append(placeholders[real_name])
+
+        kwargs["ProjectionExpression"] = ", ".join(proj_parts)
+
+    def _paginate_raw(self, operation: str, kwargs: dict[str, Any]) -> Iterator[dict[str, Any]]:
+        """Executes a paginated operation and yields raw deserialized dicts."""
+        with handle_dynamo_errors(table_name=self.config.table_name):
+            paginator = self.client.get_paginator(operation)
+            count = 0
+            for page in paginator.paginate(**kwargs):
+                for item in page["Items"]:
+                    yield self.serializer.from_dynamo(item)
+                    count += 1
+                    if self.limit_val and count >= self.limit_val:
+                        return
 
     def _build_filter_kwargs(
         self,
@@ -224,6 +313,10 @@ class BaseBuilder(Iterable[T]):
         cursor = self.serializer.from_dynamo(raw_key) if raw_key else None
 
         return PageResult(items=items, last_evaluated_key=cursor, count=len(items))
+
+    def _resolve_executable(self) -> tuple[str, dict[str, Any]]:
+        """Returns the (operation_name, kwargs) pair for terminal execution."""
+        raise NotImplementedError
 
     def __iter__(self) -> Iterator[T]:
         raise NotImplementedError

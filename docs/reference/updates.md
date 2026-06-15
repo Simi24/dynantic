@@ -8,6 +8,8 @@ Atomic update builder for DynamoDB update expressions.
         - UpdateBuilder
         - UpdateAction
         - Set
+        - SetIfNotExists
+        - Append
         - Remove
         - Add
         - Delete

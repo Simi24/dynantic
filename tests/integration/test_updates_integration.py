@@ -200,3 +200,40 @@ class TestUpdatesIntegration:
         assert updated.status.value == "active"
         assert updated.balance == 120.0
         assert updated.tags == {"A", "B"}
+
+
+@pytest.mark.integration
+class TestFunctionalUpdatesIntegration:
+    """Test if_not_exists and list_append update operations against LocalStack."""
+
+    def test_set_if_not_exists_does_not_overwrite_existing(
+        self, clean_integration_tables, integration_user_model
+    ):
+        integration_user_model(email="e1", username="alice", age=30, score=5.0).save()
+
+        integration_user_model.update("e1").set_if_not_exists(
+            integration_user_model.score, 99.0
+        ).execute()
+
+        assert integration_user_model.get("e1").score == 5.0
+
+    def test_set_if_not_exists_sets_when_absent(
+        self, clean_integration_tables, integration_user_model
+    ):
+        integration_user_model(email="e2", username="bob", age=25, score=1.0).save()
+        integration_user_model.update("e2").remove(integration_user_model.score).execute()
+
+        integration_user_model.update("e2").set_if_not_exists(
+            integration_user_model.score, 42.0
+        ).execute()
+
+        assert integration_user_model.get("e2").score == 42.0
+
+    def test_append_extends_existing_list(self, clean_integration_tables, integration_user_model):
+        integration_user_model(email="e3", username="carol", age=20, tags=["x"]).save()
+
+        integration_user_model.update("e3").append(
+            integration_user_model.tags, ["y", "z"]
+        ).execute()
+
+        assert integration_user_model.get("e3").tags == ["x", "y", "z"]

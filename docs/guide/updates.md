@@ -19,6 +19,39 @@ User.update("user-123", "john@example.com") \
     .execute()
 ```
 
+## Functional Updates
+
+### Atomic increment
+
+A numeric `add()` is an atomic increment/decrement — no read needed:
+
+```python
+# Increment by 1, decrement with a negative value
+User.update("user-123").add(User.login_count, 1).execute()
+User.update("user-123").add(User.credits, -5).execute()
+```
+
+### Set only if absent (`if_not_exists`)
+
+Writes the value only when the attribute doesn't already exist — handy for
+initializing a field once without overwriting it on later updates:
+
+```python
+User.update("user-123") \
+    .set_if_not_exists(User.created_at, datetime.now(timezone.utc)) \
+    .execute()
+```
+
+### Append to a list (`list_append`)
+
+Appends items to an existing list attribute (the value must be a list):
+
+```python
+User.update("user-123") \
+    .append(User.events, ["login"]) \
+    .execute()
+```
+
 ## Conditional Updates
 
 ```python
@@ -54,6 +87,8 @@ updated_user = User.update("user-123", "john@example.com") \
 | Action | Description | Example |
 |---|---|---|
 | `set(field, value)` | Update an attribute | `.set(User.status, "active")` |
+| `set_if_not_exists(field, value)` | Set only if attribute is absent | `.set_if_not_exists(User.created_at, now)` |
+| `append(field, list)` | Append to a list (`list_append`) | `.append(User.events, ["login"])` |
 | `remove(field)` | Remove an attribute | `.remove(User.temp_code)` |
 | `add(field, value)` | Increment number or add to set | `.add(User.balance, 10.0)` |
 | `delete(field, value)` | Remove elements from set | `.delete(User.tags, {"old"})` |

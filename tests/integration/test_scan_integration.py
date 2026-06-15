@@ -187,6 +187,23 @@ class TestScanIntegration:
         assert len(message_results) == 1
         assert message_results[0].room_id == message_data["room_id"]
 
+    def test_scan_count(self, clean_integration_tables, integration_user_model):
+        """Test scan .count() returns the number of items."""
+        for i in range(4):
+            integration_user_model(email=f"u{i}@example.com", username=f"u{i}", age=20 + i).save()
+
+        assert integration_user_model.scan().count() == 4
+
+    def test_scan_values_projection(self, clean_integration_tables, integration_user_model):
+        """Test scan .values() returns only requested fields as dicts."""
+        for i in range(3):
+            integration_user_model(email=f"v{i}@example.com", username=f"v{i}", age=30 + i).save()
+
+        rows = integration_user_model.scan().values("email")
+
+        assert len(rows) == 3
+        assert all(set(row.keys()) == {"email"} for row in rows)
+
     def test_scan_with_different_data_types(self, clean_integration_tables, integration_user_model):
         """Test scanning items with various data types."""
         # Create users with different data types
