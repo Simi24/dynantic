@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.4.0](https://github.com/Simi24/dynantic/compare/dynantic-v0.3.1...dynantic-v0.4.0) (2026-06-15)
+
+
+### Features
+
+* add projection/count query terminals and functional updates ([54ec90d](https://github.com/Simi24/dynantic/commit/54ec90d681a56bd81830b16eafd0ce298cb15908))
+* updated claude code dynantic skill ([7361914](https://github.com/Simi24/dynantic/commit/736191472901882992d20132c47106603b4cd98a))
+
+
+### Bug Fixes
+
+* enable emoji rendering in docs site ([891749a](https://github.com/Simi24/dynantic/commit/891749affa5ac89f6fe00cd7b6b6a7c45ece43a5))
+* merge condition check into TransactPut to avoid duplicate key error ([93017e5](https://github.com/Simi24/dynantic/commit/93017e501e1e8b4e5aa8f26474ed625449ed71b3)), closes [#15](https://github.com/Simi24/dynantic/issues/15)
+
+
+### Documentation
+
+* add Advanced Guide, Integration, Comparison, and API Reference ([baca4af](https://github.com/Simi24/dynantic/commit/baca4af1a96e995bcad9d4e06f21daa7f6c2bc2f))
+* add Advanced Guide, Integration, Comparison, and API Reference ([0815e63](https://github.com/Simi24/dynantic/commit/0815e637b5c4bb953bef6dff7084a1665fe239ba))
+* add Getting Started and Core Guide pages ([900f0a7](https://github.com/Simi24/dynantic/commit/900f0a7fc3465f47528ef96ebff72f2cae8d5e51))
+* add Getting Started and Core Guide pages ([9b2c451](https://github.com/Simi24/dynantic/commit/9b2c451918780e4644aa67a0bb2e63f66046598d)), closes [#18](https://github.com/Simi24/dynantic/issues/18)
+* bootstrap MkDocs Material site with home page and auto-deploy ([a5c034f](https://github.com/Simi24/dynantic/commit/a5c034fc21cc9f5f111b9526154584b70bd309ec))
+* bootstrap MkDocs Material site with home page and auto-deploy ([50972d4](https://github.com/Simi24/dynantic/commit/50972d41da7a56d5cd56eb0d8a62cda0c5ead62a)), closes [#17](https://github.com/Simi24/dynantic/issues/17)
+* remove white background from logo for dark mode compatibility ([fd5ceb9](https://github.com/Simi24/dynantic/commit/fd5ceb9f4c9779690c5a3c730b2eebf37c3d714c))
+* trim README to point to documentation site ([2d40983](https://github.com/Simi24/dynantic/commit/2d40983a09fed3bd822f9c8ecb3080e74cee5d45))
+* trim README to point to documentation site ([8a59b38](https://github.com/Simi24/dynantic/commit/8a59b38878f07d5abe9c3ead81f35840ea790983)), closes [#22](https://github.com/Simi24/dynantic/issues/22)
+* use dyno.png as logo and favicon ([2395ce5](https://github.com/Simi24/dynantic/commit/2395ce565c1537a289bdcb7fbbd30e85c5832bf2))
+
 ## [0.3.1](https://github.com/Simi24/dynantic/compare/dynantic-v0.3.0...dynantic-v0.3.1) (2026-03-27)
 
 
