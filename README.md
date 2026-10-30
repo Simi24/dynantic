@@ -94,6 +94,10 @@ User.delete("user-123", "john@example.com")
 
 > **[Full documentation and guides](https://simi24.github.io/dynantic)**
 
+## Used in production
+
+[FoosRank](https://foosrank.app/), a foosball league app with ELO ratings, runs on dynantic: one DynamoDB table, every entity registered through a discriminator, leaderboards served by a GSI query. The source is on GitHub: [Simi24/FoosbalLeague](https://github.com/Simi24/FoosbalLeague), start from `backend/app/models/`.
+
 ## Contributing
 
 1. Fork the repository
